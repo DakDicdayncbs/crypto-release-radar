@@ -1,0 +1,11 @@
+{
+  "repositories": [
+    "bitcoin/bitcoin",
+    "ethereum/go-ethereum",
+    "foundry-rs/foundry"
+  ],
+  "limit": 3,
+  "includePrereleases": false,
+  "maxPages": 3,
+  "timeoutMs": 10000
+}

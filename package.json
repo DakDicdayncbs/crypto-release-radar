@@ -1,0 +1,16 @@
+{
+  "name": "crypto-release-radar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A bounded, read-only GitHub release digest CLI for explicit repository lists.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "bin": { "crypto-release-radar": "bin/crypto-release-radar.js" },
+  "scripts": {
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage",
+    "demo": "node bin/crypto-release-radar.js --demo",
+    "start": "node bin/crypto-release-radar.js"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+coverage/
+.env
+.env.*
+!.env.example
+radar.config.json
+*.log
+.DS_Store

@@ -35,13 +35,13 @@ async function harness(t, handler, config = {}) {
     const { pathname, search } = new URL(url);
     return fetch(`http://127.0.0.1:${server.address().port}${pathname}${search}`, options);
   };
-  async function run(extra = []) {
+  async function run(extra = [], format = 'json') {
     let stdout = '', stderr = '';
-    const code = await runCli(['--config', path, '--format', 'json', ...extra], {
+    const code = await runCli(['--config', path, '--format', format, ...extra], {
       stdout: { write: (s) => { stdout += s; } }, stderr: { write: (s) => { stderr += s; } },
       env: {}, fetchImpl, now: () => new Date('2026-09-30T00:00:00Z'),
     });
-    return { code, report: JSON.parse(stdout), stderr, stdout };
+    return { code, report: format === 'json' ? JSON.parse(stdout) : undefined, stderr, stdout };
   }
   return { run, requests };
 }
@@ -141,6 +141,95 @@ test('CLI over HTTP: redirects are not followed', async (t) => {
   assert.equal(code, 1);
   assert.equal(h.requests.length, 1);
   assert.equal(report.issues[0].code, 'redirect_refused');
+});
+
+test('since scans past old pages, compares instants inclusively, then sorts and limits', async (t) => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.endsWith('page=1')) return respond(res, [release(1, 'demo/one', { published_at: '2026-09-29T10:00:00.122Z' })], {
+      link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+    });
+    respond(res, [
+      release(2, 'demo/one', { published_at: '2026-09-29T13:00:00.123+03:00' }),
+      release(3, 'demo/one', { published_at: '2026-09-29T05:00:00.124-05:00' }),
+      release(4, 'demo/one', { published_at: '2026-09-29T10:00:00.125Z', prerelease: true }),
+      release(5, 'demo/one', { published_at: '2026-09-29T10:00:00.126Z', draft: true }),
+    ]);
+  });
+  const full = await h.run(['--since', '2026-09-29T10:00:00.123Z']);
+  assert.equal(full.code, 0);
+  assert.equal(full.report.complete, true);
+  assert.deepEqual(full.report.releases.map(r => r.id), [3, 2]);
+  assert.equal(full.report.repositories[0].pagesFetched, 2);
+  assert.equal(full.report.repositories[0].scannedEntries, 5);
+  assert.equal(full.report.repositories[0].matchingReleases, 2);
+  assert.equal(full.report.scope.since, '2026-09-29T10:00:00.123Z');
+  assert.equal(h.requests.length, 2);
+  assert.ok(h.requests.every(url => !url.includes('since=')));
+  const limited = await h.run(['--since', '2026-09-29T13:00:00.123+03:00', '--limit', '1', '--include-prereleases']);
+  assert.equal(limited.code, 0);
+  assert.deepEqual(limited.report.releases.map(r => r.id), [4]);
+  assert.equal(limited.report.repositories[0].matchingReleases, 3);
+  assert.equal(limited.report.repositories[0].selectionLimited, true);
+  assert.equal(h.requests.length, 4);
+});
+
+test('since filtering everything preserves page-budget incompleteness and table/JSON diagnostics', async (t) => {
+  const h = await harness(t, (req, res) => respond(res, [release(1)], {
+    link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+  }), { maxPages: 1 });
+  const result = await h.run(['--since', '2026-10-01T00:00:00Z']);
+  assert.equal(result.code, 1);
+  assert.equal(result.report.complete, false);
+  assert.deepEqual(result.report.releases, []);
+  assert.equal(result.report.issues[0].code, 'page_limit');
+  assert.equal(result.report.repositories[0].matchingReleases, 0);
+  assert.equal(result.report.repositories[0].selectionLimited, false);
+  const table = await h.run(['--since', '2026-10-01T03:00:00+03:00'], 'table');
+  assert.equal(table.code, 1);
+  assert.match(table.stdout, /INCOMPLETE scan/);
+  assert.match(table.stdout, /published_at >= 2026-10-01T00:00:00\.000Z/);
+  assert.match(table.stderr, /page_limit/);
+});
+
+test('since preserves later-page HTTP errors for both empty and matching partial results', async (t) => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.endsWith('page=1')) return respond(res, [release(1), release(29)], {
+      link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+    });
+    res.writeHead(500); res.end('private-remote-error');
+  });
+  const result = await h.run(['--since', '2026-10-01T00:00:00Z']);
+  assert.equal(result.code, 1);
+  assert.equal(result.report.complete, false);
+  assert.deepEqual(result.report.releases, []);
+  assert.equal(result.report.issues[0].code, 'http_error');
+  assert.equal(result.report.repositories[0].pagesFetched, 1);
+  assert.equal(h.requests.length, 2);
+  assert.ok(!(result.stdout + result.stderr).includes('private-remote-error'));
+  const matching = await h.run(['--since', '2026-09-29T15:00:00+03:00']);
+  assert.equal(matching.code, 1);
+  assert.equal(matching.report.complete, false);
+  assert.deepEqual(matching.report.releases.map(release => release.id), [29]);
+  assert.equal(matching.report.issues[0].code, 'http_error');
+  assert.equal(h.requests.length, 4);
+});
+
+test('since cannot hide malformed records or duplicate IDs outside the matching date window', async (t) => {
+  const h = await harness(t, (req, res) => respond(res, [release(1), release(1), release(2, 'demo/one', { published_at: '2026-02-30T00:00:00Z' })]));
+  const result = await h.run(['--since', '2026-10-01T00:00:00Z']);
+  assert.equal(result.code, 1);
+  assert.equal(result.report.complete, false);
+  assert.deepEqual(result.report.releases, []);
+  assert.deepEqual(result.report.issues.map(issue => issue.code), ['invalid_record', 'duplicate_release']);
+});
+
+test('since and an empty valid API response remain a complete empty result', async (t) => {
+  const h = await harness(t, (req, res) => respond(res, []));
+  const result = await h.run(['--since', '2026-10-01T00:00:00Z']);
+  assert.equal(result.code, 0);
+  assert.equal(result.report.complete, true);
+  assert.deepEqual(result.report.releases, []);
+  assert.deepEqual(result.report.issues, []);
 });
 
 test('demo reads neither token nor network, includes synthetic provenance and source links', async () => {

@@ -69,6 +69,7 @@ Repository names are compared case-insensitively for duplicates.
 --format table|json       Table by default
 --include-prereleases     Override config to include prereleases
 --limit NUMBER            Override display limit per repository
+--since TIMESTAMP         Inclusive publication lower bound (CLI only)
 --demo                    Use bundled synthetic data (cannot combine with --config)
 --help                    Usage
 --version                 Version
@@ -76,6 +77,47 @@ Repository names are compared case-insensitively for duplicates.
 
 There are no positional arguments, token flags, custom API URLs, telemetry,
 notifications, downloads, or background jobs.
+
+## Publication lower bound
+
+`--since` keeps releases whose `published_at` instant is **greater than or equal
+to** the supplied timestamp. It works with both live repositories and the synthetic
+demo, and combines with draft/prerelease filtering before sorting and display limits.
+It is a CLI option; `since` is not a JSON config field.
+
+```sh
+node bin/crypto-release-radar.js --config examples/repos.json --since 2026-09-29T19:30:00Z
+node bin/crypto-release-radar.js --demo --since 2026-09-29T22:30:00+03:00 --format json --include-prereleases
+```
+
+The accepted format is a deliberately limited
+[RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html#section-5.6)/ISO timestamp:
+`YYYY-MM-DDTHH:mm:ss[.sss](Z|+HH:mm|-HH:mm)`.
+
+- Use uppercase `T` and `Z`, required seconds, and either `Z` or a numeric offset.
+  Offset hours are `00–23`, minutes `00–59`; `+00:00` is accepted. The unknown-offset
+  notation `-00:00` is not supported.
+- Years must be `1970–9999` both in the input and after UTC conversion. Calendar
+  dates must exist, including leap-year rules. Hours are `00–23`; minutes and
+  seconds are `00–59`. Leap seconds and `24:00` are not supported.
+- Fractional seconds are optional; when present, supply **1–3 digits**. `.1` becomes
+  `.100`, `.12` becomes `.120`, and `.123` stays exact. More digits are rejected,
+  never rounded or truncated. Reports normalize the value to UTC with three digits:
+  `YYYY-MM-DDTHH:mm:ss.sssZ`.
+- Whitespace, trailing text, missing zones/values, and repeated options are rejected
+  with a safe usage error (exit `2`) before any GitHub request. Input is not echoed.
+
+For example, the two timestamps in the commands above represent the same instant.
+Comparison does not depend on the computer's local timezone. JSON exposes the
+effective UTC bound in `scope.since`, or `null` when absent; the table labels it as
+inclusive, or shows that no publication filter is set. `matchingReleases` counts
+records after all filters; `scannedEntries` still includes all retrieved entries.
+
+`--since` **does not guarantee completeness**. The CLI still scans every page within
+the existing budget, even if a page contains only older releases. Filtering an
+incomplete scan to zero releases preserves its issues, `complete: false`, and exit
+`1`. A valid complete scan with no matches exits `0`; all existing exit codes remain
+unchanged. Omitting the option preserves the previous release selection.
 
 ## Authentication and network behavior
 

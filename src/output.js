@@ -6,6 +6,9 @@ export function formatReport(report, format) {
     `Crypto Release Radar — ${report.mode === 'demo' ? 'SYNTHETIC DEMO' : 'GitHub releases'}`,
     `Result: ${report.complete ? 'complete scan' : 'INCOMPLETE scan'} | ${report.releases.length} selected releases | ${report.generatedAt}`,
     report.digestNotice,
+    report.scope.since
+      ? `Publication filter: published_at >= ${report.scope.since} (inclusive)`
+      : 'Publication filter: none (--since not set)',
     '',
     'Repository | Tag | Name | Published (UTC) | Prerelease | Source',
     '--- | --- | --- | --- | --- | ---',

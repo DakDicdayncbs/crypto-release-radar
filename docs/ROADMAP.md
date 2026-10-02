@@ -2,8 +2,9 @@
 
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
-Entries 06–45 are planned, not implemented. The count is a planning aid, not a
-commit target. Combine or revise future scope when evidence makes that useful.
+Entry 06 was completed on 2026-10-02; entries 07–45 remain planned. The count is a
+planning aid, not a commit target. Combine or revise future scope when evidence
+makes that useful.
 
 One coordinator dispatch = one unchecked item. For each item, preserve user work,
 implement a coherent change, add meaningful tests, update user documentation and
@@ -39,11 +40,13 @@ on dispatch; it is not part of initial publication.
   project boundaries, release checklist, and Node 22/24 GitHub Actions CI with
   verified official SHA pins (activated during initial publication preparation).
 
-## Query and configuration — planned
+## Query and configuration
 
-- [ ] **06. Publication lower bound.** Add `--since` with timezone-required input,
-  inclusive instant semantics, boundary/offset tests, and examples explaining its
-  interaction with bounded scans.
+- [x] **06. Publication lower bound.** Completed 2026-10-02: `--since` validates a
+  documented timestamp subset and normalizes to UTC milliseconds before requests.
+  Filtering is inclusive, precedes sort/limit, and preserves bounded-scan errors.
+  Help/README and fake/loopback/CLI tests cover boundaries, offsets, calendar dates,
+  local TZ independence, demo behavior, and empty/partial results. All 108 tests pass.
 - [ ] **07. Publication intervals.** Add `--until` and validate range ordering;
   test inclusive boundaries and empty intervals; document reproducible date windows.
 - [ ] **08. Tag pattern selection.** Add bounded glob matching for explicit tag

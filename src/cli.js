@@ -3,6 +3,7 @@ import { readConfig, validateConfig } from './config.js';
 import { RadarError, safeError } from './errors.js';
 import { formatIssues, formatReport } from './output.js';
 import { collectReport } from './radar.js';
+import { parseSince } from './since.js';
 import { redact, redactValues } from './text.js';
 
 export const HELP = `Crypto Release Radar 0.1.0 — Node.js 22+
@@ -15,9 +16,16 @@ Options:
   --format table|json       Output format (default: table)
   --include-prereleases     Include prereleases (drafts always excluded)
   --limit NUMBER            Display 1–50 releases per repository
+  --since TIMESTAMP         Include published_at >= TIMESTAMP (inclusive)
   --demo                    Bundled synthetic data, no network or token access
   --help                    Show help
   --version                 Show version
+
+--since format: YYYY-MM-DDTHH:mm:ss[.sss](Z|+HH:mm|-HH:mm).
+Use uppercase T/Z, seconds, and a known timezone; optional 1–3 fractional digits.
+Years 1970–9999 in input and UTC; offset hours 00–23, minutes 00–59.
+No whitespace, leap seconds, 24:00, or unknown offset -00:00. Output is UTC .sssZ.
+Filtering never stops pagination early or makes an incomplete scan complete.
 
 Optional environment: GITHUB_TOKEN (sent only to https://api.github.com).
 Exit codes: 0 complete; 1 incomplete/API failure; 2 config/usage/local failure.
@@ -38,11 +46,13 @@ export function parseArgs(args) {
       case '--include-prereleases': options.includePrereleases = true; break;
       case '--config':
       case '--format':
+      case '--since':
       case '--limit': {
         const value = args[++i];
         if (!value || value.startsWith('--')) throw new RadarError('usage', 'An option value is missing. See --help.');
         if (arg === '--config') options.configPath = value;
         if (arg === '--format') options.format = value;
+        if (arg === '--since') options.since = parseSince(value);
         if (arg === '--limit') {
           if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 50) throw new RadarError('usage', '--limit must be an integer between 1 and 50.');
           options.limit = Number(value);
@@ -79,7 +89,7 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
     }
     if (options.includePrereleases) config.includePrereleases = true;
     if (options.limit !== undefined) config.limit = options.limit;
-    const report = await collectReport(config, { token, fetchImpl, demoData, now });
+    const report = await collectReport(config, { token, fetchImpl, demoData, now, since: options.since });
     // Redact strings before serializing JSON so token text cannot corrupt its syntax.
     stdout.write(formatReport(redactValues(report, token), format));
     stderr.write(redact(formatIssues(report.issues), token));

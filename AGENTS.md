@@ -47,7 +47,7 @@ This is the long-lived Release Radar worker managed by the coordinating task
 The authorized release-radar slots are 12:00 and 20:00 Europe/Kyiv, with up to
 30 minutes of daily variation, dispatched by the coordinator only.
 The coordinator enables scheduling after verifying CI for the published baseline.
-The next functional item is 06, no earlier than 2026-10-02 and only on its dispatch.
+Each functional run handles only the unchecked roadmap item assigned by its dispatch.
 
 Do not create other tasks, subagents, automations, schedulers, or endless loops.
 One future dispatch implements one unchecked roadmap item, adds meaningful tests

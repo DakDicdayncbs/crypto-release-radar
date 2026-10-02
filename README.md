@@ -70,6 +70,7 @@ Repository names are compared case-insensitively for duplicates.
 --include-prereleases     Override config to include prereleases
 --limit NUMBER            Override display limit per repository
 --since TIMESTAMP         Inclusive publication lower bound (CLI only)
+--until TIMESTAMP         Inclusive publication upper bound (CLI only)
 --demo                    Use bundled synthetic data (cannot combine with --config)
 --help                    Usage
 --version                 Version
@@ -78,19 +79,41 @@ Repository names are compared case-insensitively for duplicates.
 There are no positional arguments, token flags, custom API URLs, telemetry,
 notifications, downloads, or background jobs.
 
-## Publication lower bound
+## Publication windows
 
 `--since` keeps releases whose `published_at` instant is **greater than or equal
-to** the supplied timestamp. It works with both live repositories and the synthetic
-demo, and combines with draft/prerelease filtering before sorting and display limits.
-It is a CLI option; `since` is not a JSON config field.
+to** the lower bound. `--until` keeps releases **less than or equal to** the upper
+bound. Either option works alone; together they select the closed interval
+`[since, until]`, including **both endpoints**. Equal bounds select only that exact
+instant. A lower bound later than the upper bound is a safe usage error (exit `2`),
+detected before reading configuration or a token, or making any GitHub request.
+
+Both options work with live repositories and the synthetic demo. Records are
+validated and draft/prerelease policies applied before the publication filter,
+sorting and display limits. These options are CLI-only: neither `since` nor `until`
+is accepted as a JSON config field.
 
 ```sh
 node bin/crypto-release-radar.js --config examples/repos.json --since 2026-09-29T19:30:00Z
 node bin/crypto-release-radar.js --demo --since 2026-09-29T22:30:00+03:00 --format json --include-prereleases
 ```
 
-The accepted format is a deliberately limited
+The timestamps above represent the same lower bound. Use explicit endpoints to
+repeat a date window, such as all publication instants on September 29 UTC:
+
+```sh
+node bin/crypto-release-radar.js --config examples/repos.json --since 2026-09-29T00:00:00Z --until 2026-09-29T23:59:59.999Z --format json
+node bin/crypto-release-radar.js --demo --since 2026-09-29T03:00:00+03:00 --until 2026-09-30T02:59:59.999+03:00 --format json
+node bin/crypto-release-radar.js --demo --until 2026-09-29T19:30:00Z
+```
+
+The first two commands use equivalent boundaries with different data sources.
+The third has no lower bound and includes releases exactly at the upper bound.
+Adjacent closed windows that share an endpoint both include releases at that
+instant. For consecutive UTC days, use each day's `00:00:00.000` through
+`23:59:59.999` as shown above.
+
+Both options accept the same deliberately limited
 [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html#section-5.6)/ISO timestamp:
 `YYYY-MM-DDTHH:mm:ss[.sss](Z|+HH:mm|-HH:mm)`.
 
@@ -105,19 +128,25 @@ The accepted format is a deliberately limited
   never rounded or truncated. Reports normalize the value to UTC with three digits:
   `YYYY-MM-DDTHH:mm:ss.sssZ`.
 - Whitespace, trailing text, missing zones/values, and repeated options are rejected
-  with a safe usage error (exit `2`) before any GitHub request. Input is not echoed.
+  with a safe usage error (exit `2`) before configuration/token access or any GitHub
+  request. Input is not echoed.
 
-For example, the two timestamps in the commands above represent the same instant.
 Comparison does not depend on the computer's local timezone. JSON exposes the
-effective UTC bound in `scope.since`, or `null` when absent; the table labels it as
-inclusive, or shows that no publication filter is set. `matchingReleases` counts
-records after all filters; `scannedEntries` still includes all retrieved entries.
+effective UTC bounds in `scope.since` and `scope.until`, each `null` when absent;
+the table labels the active bounds as inclusive, or shows that no publication
+filter is set. `matchingReleases` counts records after all filters;
+`selectionLimited` compares that count with the displayed count, and
+`scannedEntries` still includes all retrieved entries.
 
-`--since` **does not guarantee completeness**. The CLI still scans every page within
-the existing budget, even if a page contains only older releases. Filtering an
-incomplete scan to zero releases preserves its issues, `complete: false`, and exit
-`1`. A valid complete scan with no matches exits `0`; all existing exit codes remain
-unchanged. Omitting the option preserves the previous release selection.
+A publication window **does not guarantee completeness or freeze GitHub data**.
+It makes the filter repeatable, but releases can be added, edited, or removed
+between runs or during pagination. The CLI still scans every page within the
+existing budget, even if a page contains only older or newer releases. Filtering
+an incomplete scan to zero releases preserves its issues, `complete: false`, and
+exit `1`, including invalid records and duplicates outside the window. A valid
+complete scan with no matches exits `0`; all existing exit codes remain unchanged.
+Omitting `--until` preserves the existing `--since` selection; omitting both bounds
+preserves the unfiltered publication-time selection.
 
 ## Authentication and network behavior
 

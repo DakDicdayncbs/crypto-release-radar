@@ -2,13 +2,17 @@ const cell = (value) => String(value).replace(/\|/g, '¦');
 
 export function formatReport(report, format) {
   if (format === 'json') return JSON.stringify(report, null, 2) + '\n';
+  const bounds = [
+    report.scope.since && `published_at >= ${report.scope.since}`,
+    report.scope.until && `published_at <= ${report.scope.until}`,
+  ].filter(Boolean);
   const lines = [
     `Crypto Release Radar — ${report.mode === 'demo' ? 'SYNTHETIC DEMO' : 'GitHub releases'}`,
     `Result: ${report.complete ? 'complete scan' : 'INCOMPLETE scan'} | ${report.releases.length} selected releases | ${report.generatedAt}`,
     report.digestNotice,
-    report.scope.since
-      ? `Publication filter: published_at >= ${report.scope.since} (inclusive)`
-      : 'Publication filter: none (--since not set)',
+    bounds.length
+      ? `Publication filter: ${bounds.join(' and ')} (inclusive)`
+      : 'Publication filter: none (--since/--until not set)',
     '',
     'Repository | Tag | Name | Published (UTC) | Prerelease | Source',
     '--- | --- | --- | --- | --- | ---',

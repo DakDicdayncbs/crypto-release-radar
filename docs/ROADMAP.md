@@ -2,7 +2,7 @@
 
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
-Entry 06 was completed on 2026-10-02; entries 07–45 remain planned. The count is a
+Entries 06–07 were completed on 2026-10-02; entries 08–45 remain planned. The count is a
 planning aid, not a commit target. Combine or revise future scope when evidence
 makes that useful.
 
@@ -18,8 +18,8 @@ GitHub noreply email, as requested before the first commit. On 2026-10-01 the
 coordinator confirmed authentication and push access for the exact origin, and the
 user authorized initial publication of the baseline. Subsequent commit/push work
 requires separate coordinator dispatches. Scheduling is enabled by the coordinator
-after checking the baseline's CI result. Item 06 is deferred to 2026-10-02 or later
-on dispatch; it is not part of initial publication.
+after checking the baseline's CI result. Functional roadmap increments are separate
+from the initial baseline publication.
 
 ## Baseline — complete locally
 
@@ -47,8 +47,12 @@ on dispatch; it is not part of initial publication.
   Filtering is inclusive, precedes sort/limit, and preserves bounded-scan errors.
   Help/README and fake/loopback/CLI tests cover boundaries, offsets, calendar dates,
   local TZ independence, demo behavior, and empty/partial results. All 108 tests pass.
-- [ ] **07. Publication intervals.** Add `--until` and validate range ordering;
-  test inclusive boundaries and empty intervals; document reproducible date windows.
+- [x] **07. Publication intervals.** Completed 2026-10-02: CLI-only `--until`
+  adds an inclusive upper bound, alone or with `--since`. UTC interval ordering is
+  validated before config/token access and requests; equal bounds are allowed.
+  Table/JSON expose effective bounds and retain all scan errors/completeness.
+  README documents repeatable windows and mutable data. All 119 tests pass,
+  including boundary/offset/TZ, invalid input, empty/partial scans and compatibility.
 - [ ] **08. Tag pattern selection.** Add bounded glob matching for explicit tag
   patterns without user regex execution; test escaping, invalid patterns, and
   interactions with prereleases.

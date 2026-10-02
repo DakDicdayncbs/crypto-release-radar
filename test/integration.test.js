@@ -232,6 +232,103 @@ test('since and an empty valid API response remain a complete empty result', asy
   assert.deepEqual(result.report.issues, []);
 });
 
+test('closed windows scan past newer pages and apply bounds before prerelease selection and limits', async (t) => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.endsWith('page=1')) return respond(res, [release(1, 'demo/one', { published_at: '2026-09-29T10:00:00.126Z' })], {
+      link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+    });
+    respond(res, [
+      release(2, 'demo/one', { published_at: '2026-09-29T10:00:00.122Z' }),
+      release(3, 'demo/one', { published_at: '2026-09-29T13:00:00.123+03:00' }),
+      release(4, 'demo/one', { published_at: '2026-09-29T05:00:00.124-05:00' }),
+      release(5, 'demo/one', { published_at: '2026-09-29T10:00:00.125Z', prerelease: true }),
+      release(6, 'demo/one', { published_at: '2026-09-29T10:00:00.125Z', draft: true }),
+    ]);
+  });
+  const bounds = ['--since', '2026-09-29T10:00:00.123Z', '--until', '2026-09-29T13:00:00.125+03:00'];
+  const stable = await h.run(bounds);
+  assert.equal(stable.code, 0); assert.equal(stable.stderr, '');
+  assert.deepEqual(stable.report.releases.map(r => r.id), [4, 3]);
+  assert.equal(stable.report.scope.until, '2026-09-29T10:00:00.125Z');
+  assert.deepEqual(stable.report.repositories[0], {
+    repository: 'demo/one', complete: true, pagesFetched: 2, scannedEntries: 6,
+    matchingReleases: 2, returnedReleases: 2, selectionLimited: false,
+  });
+  const limited = await h.run([...bounds, '--include-prereleases', '--limit', '2']);
+  assert.equal(limited.code, 0);
+  assert.deepEqual(limited.report.releases.map(r => r.id), [5, 4]);
+  assert.equal(limited.report.repositories[0].matchingReleases, 3);
+  assert.equal(limited.report.repositories[0].selectionLimited, true);
+  assert.equal(h.requests.length, 4);
+  assert.ok(h.requests.every(url => !/since|until/.test(url)));
+});
+
+test('upper bounds preserve empty incomplete page-budget reports in table and JSON', async (t) => {
+  const h = await harness(t, (req, res) => respond(res, [release(29)], {
+    link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+  }), { maxPages: 1 });
+  const bounds = ['--until', '2026-09-01T00:00:00Z'];
+  const result = await h.run(bounds);
+  assert.equal(result.code, 1);
+  assert.equal(result.report.complete, false);
+  assert.deepEqual(result.report.releases, []);
+  assert.equal(result.report.issues[0].code, 'page_limit');
+  assert.equal(result.report.repositories[0].matchingReleases, 0);
+  assert.equal(result.report.repositories[0].selectionLimited, false);
+  const table = await h.run(bounds, 'table');
+  assert.equal(table.code, 1);
+  assert.match(table.stdout, /INCOMPLETE scan/);
+  assert.match(table.stdout, /published_at <= 2026-09-01T00:00:00\.000Z \(inclusive\)/);
+  assert.match(table.stderr, /page_limit/);
+});
+
+test('intervals retain HTTP failures with both empty and matching partial results', async (t) => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.endsWith('page=1')) return respond(res, [release(1), release(29)], {
+      link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+    });
+    res.writeHead(500); res.end('private-remote-error');
+  });
+  for (const [since, until, expected] of [
+    ['2026-09-02T00:00:00Z', '2026-09-03T00:00:00Z', []],
+    ['2026-09-01T12:00:00Z', '2026-09-01T15:00:00+03:00', [1]],
+  ]) {
+    const result = await h.run(['--since', since, '--until', until]);
+    assert.equal(result.code, 1);
+    assert.equal(result.report.complete, false);
+    assert.deepEqual(result.report.releases.map(r => r.id), expected);
+    assert.equal(result.report.issues[0].code, 'http_error');
+    assert.equal(result.report.repositories[0].pagesFetched, 1);
+    assert.ok(!(result.stdout + result.stderr).includes('private-remote-error'));
+  }
+  assert.equal(h.requests.length, 4);
+});
+
+test('an interval cannot hide invalid records or duplicates newer than its upper bound', async (t) => {
+  const h = await harness(t, (req, res) => respond(res, [release(29), release(29), release(28, 'demo/one', { body: 7 })]));
+  const result = await h.run(['--since', '2026-09-01T00:00:00Z', '--until', '2026-09-02T00:00:00Z']);
+  assert.equal(result.code, 1);
+  assert.equal(result.report.complete, false);
+  assert.deepEqual(result.report.releases, []);
+  assert.deepEqual(result.report.issues.map(issue => issue.code), ['invalid_record', 'duplicate_release']);
+});
+
+test('empty API responses and valid windows with no matches are complete in table and JSON', async (t) => {
+  for (const items of [[], [release(29)]]) {
+    const h = await harness(t, (req, res) => respond(res, items));
+    const bounds = ['--since', '2026-09-01T00:00:00Z', '--until', '2026-09-02T00:00:00Z'];
+    const result = await h.run(bounds);
+    assert.equal(result.code, 0); assert.equal(result.stderr, '');
+    assert.equal(result.report.complete, true);
+    assert.deepEqual(result.report.releases, []);
+    assert.deepEqual(result.report.issues, []);
+    const table = await h.run(bounds, 'table');
+    assert.equal(table.code, 0); assert.equal(table.stderr, '');
+    assert.match(table.stdout, /complete scan/);
+    assert.match(table.stdout, /No matching releases/);
+  }
+});
+
 test('demo reads neither token nor network, includes synthetic provenance and source links', async () => {
   let stdout = '', stderr = '';
   const code = await runCli(['--demo', '--format', 'json', '--include-prereleases'], {
@@ -265,13 +362,13 @@ test('config errors return code 2 and a JSON issue without leaking paths or cont
   }
 });
 
-test('CLI redacts echoed token in remote strings and never logs auth headers', async (t) => {
+test('CLI redacts echoed token in windowed remote results and never logs auth headers', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'release-radar-test-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const path = join(dir, 'config.json');
   await writeFile(path, '{"repositories":["demo/one"]}');
   let stdout = '', stderr = '';
-  const code = await runCli(['--config', path, '--format', 'json'], {
+  const code = await runCli(['--config', path, '--format', 'json', '--since', '2026-09-01T12:00:00Z', '--until', '2026-09-01T15:00:00+03:00'], {
     env: { GITHUB_TOKEN: 'test-sentinel' },
     stdout: { write: (s) => { stdout += s; } }, stderr: { write: (s) => { stderr += s; } },
     fetchImpl: async (_, options) => {

@@ -3,7 +3,7 @@ import { readConfig, validateConfig } from './config.js';
 import { RadarError, safeError } from './errors.js';
 import { formatIssues, formatReport } from './output.js';
 import { collectReport } from './radar.js';
-import { parseSince } from './since.js';
+import { parseSince, parseUntil, validateWindowOrder } from './publication-window.js';
 import { redact, redactValues } from './text.js';
 
 export const HELP = `Crypto Release Radar 0.1.0 — Node.js 22+
@@ -17,14 +17,17 @@ Options:
   --include-prereleases     Include prereleases (drafts always excluded)
   --limit NUMBER            Display 1–50 releases per repository
   --since TIMESTAMP         Include published_at >= TIMESTAMP (inclusive)
+  --until TIMESTAMP         Include published_at <= TIMESTAMP (inclusive)
   --demo                    Bundled synthetic data, no network or token access
   --help                    Show help
   --version                 Show version
 
---since format: YYYY-MM-DDTHH:mm:ss[.sss](Z|+HH:mm|-HH:mm).
+--since/--until format: YYYY-MM-DDTHH:mm:ss[.sss](Z|+HH:mm|-HH:mm).
 Use uppercase T/Z, seconds, and a known timezone; optional 1–3 fractional digits.
 Years 1970–9999 in input and UTC; offset hours 00–23, minutes 00–59.
 No whitespace, leap seconds, 24:00, or unknown offset -00:00. Output is UTC .sssZ.
+Either bound can be used alone; together they include both ends of [since, until].
+--since must be <= --until as an instant; equal bounds select that exact instant.
 Filtering never stops pagination early or makes an incomplete scan complete.
 
 Optional environment: GITHUB_TOKEN (sent only to https://api.github.com).
@@ -47,12 +50,14 @@ export function parseArgs(args) {
       case '--config':
       case '--format':
       case '--since':
+      case '--until':
       case '--limit': {
         const value = args[++i];
         if (!value || value.startsWith('--')) throw new RadarError('usage', 'An option value is missing. See --help.');
         if (arg === '--config') options.configPath = value;
         if (arg === '--format') options.format = value;
         if (arg === '--since') options.since = parseSince(value);
+        if (arg === '--until') options.until = parseUntil(value);
         if (arg === '--limit') {
           if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 50) throw new RadarError('usage', '--limit must be an integer between 1 and 50.');
           options.limit = Number(value);
@@ -64,6 +69,7 @@ export function parseArgs(args) {
   }
   if (!['table', 'json'].includes(options.format)) throw new RadarError('usage', '--format must be table or json.');
   if (options.demo && seen.has('--config')) throw new RadarError('usage', '--demo uses bundled repositories and cannot be combined with --config.');
+  validateWindowOrder(options.since, options.until);
   return options;
 }
 
@@ -89,7 +95,7 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
     }
     if (options.includePrereleases) config.includePrereleases = true;
     if (options.limit !== undefined) config.limit = options.limit;
-    const report = await collectReport(config, { token, fetchImpl, demoData, now, since: options.since });
+    const report = await collectReport(config, { token, fetchImpl, demoData, now, since: options.since, until: options.until });
     // Redact strings before serializing JSON so token text cannot corrupt its syntax.
     stdout.write(formatReport(redactValues(report, token), format));
     stderr.write(redact(formatIssues(report.issues), token));

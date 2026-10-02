@@ -1,11 +1,14 @@
 import { fetchReleases } from './github.js';
 import { compareReleases, normalizeReleases } from './releases.js';
 import { DIGEST_NOTICE } from './text.js';
-import { parseSince } from './since.js';
+import { parseSince, parseUntil, validateWindowOrder } from './publication-window.js';
 
-export async function collectReport(config, { token = '', fetchImpl, demoData, now = () => new Date(), since = null } = {}) {
+export async function collectReport(config, { token = '', fetchImpl, demoData, now = () => new Date(), since = null, until = null } = {}) {
   const sinceUtc = since === null ? null : parseSince(since);
+  const untilUtc = until === null ? null : parseUntil(until);
+  validateWindowOrder(sinceUtc, untilUtc);
   const sinceMs = sinceUtc === null ? null : Date.parse(sinceUtc);
+  const untilMs = untilUtc === null ? null : Date.parse(untilUtc);
   const releases = [], repositories = [], issues = [];
   let stop = false;
   for (const repo of config.repositories) {
@@ -17,7 +20,10 @@ export async function collectReport(config, { token = '', fetchImpl, demoData, n
     const normalized = normalizeReleases(result.items, repo, config.includePrereleases, token);
     if (normalized.invalidCount) result.issues.push({ code: 'invalid_record', message: 'Malformed release entries were omitted.', count: normalized.invalidCount });
     if (normalized.duplicateCount) result.issues.push({ code: 'duplicate_release', message: 'Duplicate release IDs were omitted; pagination may have changed during the scan.', count: normalized.duplicateCount });
-    const matching = normalized.releases.filter((release) => sinceMs === null || Date.parse(release.publishedAt) >= sinceMs);
+    const matching = normalized.releases.filter((release) => {
+      const publishedMs = Date.parse(release.publishedAt);
+      return (sinceMs === null || publishedMs >= sinceMs) && (untilMs === null || publishedMs <= untilMs);
+    });
     const selected = matching.sort(compareReleases).slice(0, config.limit);
     const complete = result.scanComplete && result.issues.length === 0;
     repositories.push({ repository: repo, complete, pagesFetched: result.pagesFetched, scannedEntries: result.items.length,
@@ -33,7 +39,7 @@ export async function collectReport(config, { token = '', fetchImpl, demoData, n
     generatedAt: now().toISOString(),
     complete: repositories.every((repo) => repo.complete),
     digestNotice: DIGEST_NOTICE,
-    scope: { limitPerRepository: config.limit, includePrereleases: config.includePrereleases, maxPagesPerRepository: config.maxPages, since: sinceUtc },
+    scope: { limitPerRepository: config.limit, includePrereleases: config.includePrereleases, maxPagesPerRepository: config.maxPages, since: sinceUtc, until: untilUtc },
     repositories,
     releases: releases.sort(compareReleases),
     issues,

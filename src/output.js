@@ -25,7 +25,7 @@ export function formatReport(report, format) {
   for (const release of report.releases) lines.push('', `${release.repository} ${release.tag} — excerpt: ${release.digest.text}`);
   lines.push('', 'Repository scan status:');
   for (const repo of report.repositories) {
-    lines.push(`${repo.repository}: ${repo.complete ? 'complete' : 'INCOMPLETE'}; ${repo.scannedEntries} entries scanned; ${repo.returnedReleases}/${repo.matchingReleases} matching releases shown${repo.selectionLimited ? ' (display limit)' : ''}`);
+    lines.push(`${repo.repository}: ${repo.complete ? 'complete' : 'INCOMPLETE'}; ${repo.scannedEntries} entries scanned; ${repo.returnedReleases}/${repo.matchingReleases} matching releases shown${repo.selectionLimited ? ' (display limit)' : ''}; policy: limit ${repo.policy.limit}, prereleases ${repo.policy.includePrereleases ? 'included' : 'excluded'}`);
   }
   if (!report.complete) lines.push('', 'Results cover retrieved pages only. Newest releases outside those pages may be missing.');
   return lines.join('\n') + '\n';

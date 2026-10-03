@@ -15,14 +15,19 @@ Usage: node bin/crypto-release-radar.js --config examples/repos.json [options]
 Options:
   --config PATH             JSON config (default: radar.config.json)
   --format table|json       Output format (default: table)
-  --include-prereleases     Include prereleases (drafts always excluded)
-  --limit NUMBER            Display 1–50 releases per repository
+  --include-prereleases     Include prereleases in every repository (no drafts)
+  --limit NUMBER            Override every repository's display limit (1–50)
   --since TIMESTAMP         Include published_at >= TIMESTAMP (inclusive)
   --until TIMESTAMP         Include published_at <= TIMESTAMP (inclusive)
   --tag-pattern GLOB        Match original tags; repeat up to 10 times (OR)
   --demo                    Bundled synthetic data, no network or token access
   --help                    Show help
   --version                 Show version
+
+Config repositories accept slug strings or objects with slug, limit and
+includePrereleases. Precedence per field: CLI > repository object > top-level
+config > defaults (limit 5, includePrereleases false). Explicit false is preserved.
+All config fields are validated even when overridden. Reports show each policy.
 
 --since/--until format: YYYY-MM-DDTHH:mm:ss[.sss](Z|+HH:mm|-HH:mm).
 Use uppercase T/Z, seconds, and a known timezone; optional 1–3 fractional digits.
@@ -111,9 +116,10 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
       token = suppliedToken ?? '';
       if (token && (!/^[\x21-\x7e]+$/.test(token) || token.length > 4096)) throw new RadarError('invalid_token', 'GITHUB_TOKEN contains invalid characters or exceeds the size limit.');
     }
-    if (options.includePrereleases) config.includePrereleases = true;
-    if (options.limit !== undefined) config.limit = options.limit;
-    const report = await collectReport(config, { token, fetchImpl, demoData, now, since: options.since, until: options.until, tagPatterns: options.tagPatterns });
+    const report = await collectReport(config, {
+      token, fetchImpl, demoData, now, since: options.since, until: options.until, tagPatterns: options.tagPatterns,
+      policyOverrides: { limit: options.limit, includePrereleases: options.includePrereleases },
+    });
     // Redact strings before serializing JSON so token text cannot corrupt its syntax.
     stdout.write(formatReport(redactValues(report, token), format));
     stderr.write(redact(formatIssues(report.issues), token));

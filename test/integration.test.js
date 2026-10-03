@@ -252,6 +252,7 @@ test('closed windows scan past newer pages and apply bounds before prerelease se
   assert.equal(stable.report.scope.until, '2026-09-29T10:00:00.125Z');
   assert.deepEqual(stable.report.repositories[0], {
     repository: 'demo/one', complete: true, pagesFetched: 2, scannedEntries: 6,
+    policy: { limit: 5, includePrereleases: false },
     matchingReleases: 2, returnedReleases: 2, selectionLimited: false,
   });
   const limited = await h.run([...bounds, '--include-prereleases', '--limit', '2']);
@@ -400,6 +401,78 @@ test('empty tag matches and empty API responses are complete without changing ex
       } else assert.match(result.stdout, /No matching releases/);
     }
   }
+});
+
+test('repository policies govern paginated selection independently without changing request budgets', async (t) => {
+  const h = await harness(t, (req, res) => {
+    const repo = req.url.includes('/two/') ? 'demo/two' : 'demo/one';
+    if (req.url.endsWith('page=1')) return respond(res, [release(20, repo, { prerelease: true })], {
+      link: `<https://api.github.com/repos/${repo}/releases?per_page=100&page=2>; rel="next"`,
+    });
+    respond(res, [release(3, repo), release(1, repo)]);
+  }, {
+    repositories: [{ slug: 'demo/one', limit: 1, includePrereleases: false }, { slug: 'demo/two', limit: 2 }],
+    limit: 5, includePrereleases: true,
+  });
+  const result = await h.run(['--tag-pattern', 'v*', '--since', '2026-09-01T12:00:00Z', '--until', '2026-09-20T15:00:00+03:00']);
+  assert.equal(result.code, 0); assert.equal(result.stderr, '');
+  assert.deepEqual(result.report.releases.map(r => [r.repository, r.id]), [['demo/two', 20], ['demo/one', 3], ['demo/two', 3]]);
+  assert.deepEqual(result.report.repositories.map(r => r.policy), [{ limit: 1, includePrereleases: false }, { limit: 2, includePrereleases: true }]);
+  assert.deepEqual(result.report.repositories.map(r => [r.pagesFetched, r.scannedEntries, r.matchingReleases, r.selectionLimited]), [[2, 3, 2, true], [2, 3, 3, true]]);
+  assert.equal(h.requests.length, 4);
+  assert.ok(h.requests.every(url => /^\/repos\/demo\/(one|two)\/releases\?per_page=100&page=[12]$/.test(url)));
+});
+
+test('mixed policy reports retain partial HTTP errors and empty complete repositories', async (t) => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.includes('/two/')) return respond(res, []);
+    if (req.url.endsWith('page=1')) return respond(res, [release(1), release(2, 'demo/one', { prerelease: true })], {
+      link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+    });
+    res.writeHead(500); res.end('private-remote-body');
+  }, { repositories: [{ slug: 'demo/one', includePrereleases: false }, 'demo/two'], limit: 2, includePrereleases: true });
+  for (const [extra, expected] of [[[], [1]], [['--tag-pattern', 'nothing'], []]]) {
+    const result = await h.run(extra);
+    assert.equal(result.code, 1); assert.equal(result.report.complete, false);
+    assert.deepEqual(result.report.releases.map(r => r.id), expected);
+    assert.equal(result.report.issues[0].code, 'http_error');
+    assert.equal(result.report.repositories[0].complete, false);
+    assert.equal(result.report.repositories[1].complete, true);
+    assert.deepEqual(result.report.repositories.map(r => r.policy), [{ limit: 2, includePrereleases: false }, { limit: 2, includePrereleases: true }]);
+    assert.equal(result.report.scope.limitPerRepository, 2);
+    assert.equal(result.report.scope.includePrereleases, null);
+    assert.ok(!(result.stdout + result.stderr).includes('private-remote-body'));
+  }
+  assert.equal(h.requests.length, 6);
+});
+
+test('skipped repositories keep their own effective policy in JSON and table', async (t) => {
+  const h = await harness(t, (req, res) => { res.writeHead(401); res.end('private-remote-body'); }, {
+    repositories: [{ slug: 'demo/one', limit: 1 }, { slug: 'demo/two', limit: 3, includePrereleases: true }],
+  });
+  const result = await h.run();
+  assert.equal(result.code, 1); assert.deepEqual(result.report.releases, []);
+  assert.deepEqual(result.report.issues.map(i => i.code), ['unauthorized', 'skipped']);
+  assert.deepEqual(result.report.repositories.map(r => r.policy), [{ limit: 1, includePrereleases: false }, { limit: 3, includePrereleases: true }]);
+  assert.equal(result.report.repositories[1].pagesFetched, 0);
+  assert.equal(result.report.scope.limitPerRepository, null); assert.equal(result.report.scope.includePrereleases, null);
+  const table = await h.run([], 'table');
+  assert.equal(table.code, 1); assert.match(table.stderr, /skipped/);
+  assert.match(table.stdout, /demo\/two: INCOMPLETE;.*policy: limit 3, prereleases included/);
+  assert.equal(h.requests.length, 2);
+});
+
+test('per-repository prerelease exclusion does not mask malformed or duplicate excluded rows', async (t) => {
+  const h = await harness(t, (req, res) => respond(res, [
+    release(1, 'demo/one', { prerelease: true }), release(1, 'demo/one', { prerelease: true }),
+    release(2, 'demo/one', { prerelease: true, body: 7 }),
+  ]), { repositories: [{ slug: 'demo/one', includePrereleases: false }], includePrereleases: true });
+  const result = await h.run();
+  assert.equal(result.code, 1); assert.equal(result.report.complete, false);
+  assert.deepEqual(result.report.releases, []);
+  assert.deepEqual(result.report.issues.map(i => i.code), ['invalid_record', 'duplicate_release']);
+  assert.equal(result.report.repositories[0].policy.includePrereleases, false);
+  assert.equal(result.report.scope.includePrereleases, false);
 });
 
 test('demo reads neither token nor network, includes synthetic provenance and source links', async () => {

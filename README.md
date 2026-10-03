@@ -54,21 +54,22 @@ the report and exit status make that visible.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `repositories` | required | 1–20 explicit `owner/repo` strings; no URLs, duplicates, or discovery |
-| `limit` | `5` | 1–50 displayed releases **per repository**, after filtering and UTC sorting |
-| `includePrereleases` | `false` | Include records GitHub labels as prereleases |
+| `repositories` | required | 1–20 explicit slug strings or repository policy objects; mixed lists allowed |
+| `limit` | `5` | Default display limit per repository, 1–50, after filtering and UTC sorting |
+| `includePrereleases` | `false` | Default policy for records GitHub labels as prereleases |
 | `maxPages` | `3` | 1–10 pages per repository, 100 records per page |
 | `timeoutMs` | `10000` | 100–30000 ms for each complete HTTP page, including its body |
 
 Unknown config keys are rejected, including embedded tokens and alternate hosts.
 The CLI uses `radar.config.json` by default; that local file is ignored by Git.
-Repository names are compared case-insensitively for duplicates.
+Repository names are compared case-insensitively for duplicates across strings
+and objects. URLs, credentials, discovery, and duplicate slugs are not accepted.
 
 ```text
 --config PATH             Config file
 --format table|json       Table by default
---include-prereleases     Override config to include prereleases
---limit NUMBER            Override display limit per repository
+--include-prereleases     Include prereleases in every repository
+--limit NUMBER            Override every repository's display limit
 --since TIMESTAMP         Inclusive publication lower bound (CLI only)
 --until TIMESTAMP         Inclusive publication upper bound (CLI only)
 --tag-pattern GLOB        Match original tags; repeat up to 10 times (OR, CLI only)
@@ -79,6 +80,77 @@ Repository names are compared case-insensitively for duplicates.
 
 There are no positional arguments, token flags, custom API URLs, telemetry,
 notifications, downloads, or background jobs.
+
+### Individual repository policies
+
+A `repositories` entry may be a slug string or an object containing only:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `slug` | yes | The same explicit `owner/repo` string accepted by the original format |
+| `limit` | no | Integer 1–50; inherits the top-level limit when omitted |
+| `includePrereleases` | no | Boolean `true` or `false`; inherits the top-level policy when omitted |
+
+For each field independently, the priority is **explicit CLI override > repository
+object > top-level config > built-in default**. An explicit `false` overrides a
+top-level `true`. `--include-prereleases` sets `true` for every repository; omitting
+it leaves configured values in effect. There is no CLI flag to force `false`.
+`--limit NUMBER` overrides every repository's limit. Overrides do not bypass
+validation: wrong types/ranges, `null`, arrays, missing slugs, and unknown fields
+fail safely with exit `2` before token access or API requests, even if CLI options
+would replace those values. Optional fields must be omitted to inherit, not set
+to `null`. Network budgets remain top-level only; date/tag filters remain CLI-only.
+
+Existing string-only files need no migration. For example, these two entries are
+equivalent and can be substituted without changing selection:
+
+```json
+"ethereum/go-ethereum"
+```
+
+```json
+{ "slug": "ethereum/go-ethereum" }
+```
+
+To customize only some repositories, save a mixed config such as:
+
+```json
+{
+  "repositories": [
+    "bitcoin/bitcoin",
+    { "slug": "ethereum/go-ethereum", "limit": 2, "includePrereleases": false },
+    { "slug": "foundry-rs/foundry", "limit": 1 }
+  ],
+  "limit": 5,
+  "includePrereleases": true,
+  "maxPages": 3,
+  "timeoutMs": 10000
+}
+```
+
+Without CLI overrides, the effective policies are Bitcoin `5/true`, Geth
+`2/false`, and Foundry `1/true` (`limit/includePrereleases`). Running that config
+with `--limit 4 --include-prereleases` applies `4/true` to all three. Converting a
+string to an object does not grant extra access or change which endpoint is used.
+
+JSON keeps `schemaVersion: 1` and existing scan/release fields. Every entry in the
+report's `repositories` array now includes `policy: { limit, includePrereleases }`
+with its effective settings, including empty, failed, and skipped repositories.
+Table scan-status lines show the same policy. `scope.limitPerRepository` and
+`scope.includePrereleases` summarize **actual effective settings**, not fallback
+defaults: each retains its previous number/boolean when all repositories agree,
+and is **`null` when that particular setting differs**. This is a nullable extension
+for mixed policies; consumers using objects should read each repository's `policy`
+rather than assume one global setting. Existing string-only configurations retain
+their previous scope values and selection. The new policy field is additive, so
+the report version remains unchanged. Token redaction still covers report strings;
+policy limits and booleans remain typed values.
+
+All filters run before per-repository display limits, followed by the existing
+global UTC sort. Draft exclusion, record validation, duplicate detection, scan
+budgets, partial errors, completeness and exit codes are unchanged. Policies also
+apply to repositories whose requests are skipped after authentication/rate errors;
+their displayed policy describes the requested selection, not a successful scan.
 
 ## Publication windows
 

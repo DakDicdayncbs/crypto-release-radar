@@ -2,8 +2,8 @@
 
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
-Entries 06–07 were completed on 2026-10-02 and entry 08 on 2026-10-03; entries
-09–45 remain planned. The count is a planning aid, not a commit target. Combine
+Entries 06–07 were completed on 2026-10-02 and entries 08–09 on 2026-10-03; entries
+10–45 remain planned. The count is a planning aid, not a commit target. Combine
 or revise future scope when evidence makes that useful.
 
 One coordinator dispatch = one unchecked item. For each item, preserve user work,
@@ -60,9 +60,13 @@ from the initial baseline publication.
   pagination and limits remain explicit. Scope/table/help/README document patterns
   and shell quoting. All 136 tests pass, including limits, escaping, Unicode,
   adversarial patterns, raw/display differences, composition and partial results.
-- [ ] **09. Per-repository policy.** Allow an object entry with individual display
-  and prerelease settings; define precedence and preserve simple string configs
-  with compatibility tests and migration examples.
+- [x] **09. Per-repository policy.** Completed 2026-10-03: mixed string/object
+  entries support strict `slug`, `limit` and `includePrereleases` fields. Per-field
+  priority is CLI > object > top-level > defaults, preserving explicit false and
+  validating overridden config. Reports expose each effective policy, with nullable
+  scope summaries for differing policies; README/help document compatibility and
+  migration. All 149 tests pass, including precedence, old-config equivalence,
+  filters, pagination, partial/skipped results and safe failures/redaction.
 - [ ] **10. Named repository groups.** Add explicit local groups and selection;
   validate unknown names, duplicates, and expansion budgets. No network discovery.
 - [ ] **11. Shared config validation command.** Add a network-free validation mode

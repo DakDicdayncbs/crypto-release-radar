@@ -29,6 +29,7 @@ for (const [label, value] of [
   ['alternate host', { repositories: ['a/b'], apiUrl: 'https://example.org' }],
   ['CLI-only since', { repositories: ['a/b'], since: '2026-09-29T00:00:00Z' }],
   ['CLI-only until', { repositories: ['a/b'], until: '2026-09-30T00:00:00Z' }],
+  ['CLI-only tagPatterns', { repositories: ['a/b'], tagPatterns: ['v*'] }],
 ]) {
   test(`config rejects ${label} without reflecting input`, () => {
     assert.throws(() => validateConfig(value), (error) => error.code === 'invalid_config' && !error.message.includes('do-not-output'));

@@ -13,6 +13,9 @@ export function formatReport(report, format) {
     bounds.length
       ? `Publication filter: ${bounds.join(' and ')} (inclusive)`
       : 'Publication filter: none (--since/--until not set)',
+    report.scope.tagPatterns.length
+      ? `Tag filter (OR, whole original tag): ${JSON.stringify(report.scope.tagPatterns)}`
+      : 'Tag filter: none (--tag-pattern not set)',
     '',
     'Repository | Tag | Name | Published (UTC) | Prerelease | Source',
     '--- | --- | --- | --- | --- | ---',

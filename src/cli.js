@@ -4,6 +4,7 @@ import { RadarError, safeError } from './errors.js';
 import { formatIssues, formatReport } from './output.js';
 import { collectReport } from './radar.js';
 import { parseSince, parseUntil, validateWindowOrder } from './publication-window.js';
+import { compileTagPatterns, MAX_TAG_PATTERNS } from './tag-patterns.js';
 import { redact, redactValues } from './text.js';
 
 export const HELP = `Crypto Release Radar 0.1.0 — Node.js 22+
@@ -18,6 +19,7 @@ Options:
   --limit NUMBER            Display 1–50 releases per repository
   --since TIMESTAMP         Include published_at >= TIMESTAMP (inclusive)
   --until TIMESTAMP         Include published_at <= TIMESTAMP (inclusive)
+  --tag-pattern GLOB        Match original tags; repeat up to 10 times (OR)
   --demo                    Bundled synthetic data, no network or token access
   --help                    Show help
   --version                 Show version
@@ -30,6 +32,12 @@ Either bound can be used alone; together they include both ends of [since, until
 --since must be <= --until as an instant; equal bounds select that exact instant.
 Filtering never stops pagination early or makes an incomplete scan complete.
 
+Tag globs match the whole original tag, case-sensitively: * = zero or more Unicode
+code points, ? = one. Escape only *, ? or backslash with backslash; others literal.
+Max 128 code points / 256 UTF-16 units per glob; no control/format characters.
+Quote globs in your shell, e.g. --tag-pattern 'v1.*'. For leading -- use
+--tag-pattern='--literal*'. Patterns are public report data; never include secrets.
+
 Optional environment: GITHUB_TOKEN (sent only to https://api.github.com).
 Exit codes: 0 complete; 1 incomplete/API failure; 2 config/usage/local failure.
 Digest is an automatic excerpt, not a verified breaking/security assessment.
@@ -39,14 +47,23 @@ export function parseArgs(args) {
   const options = { configPath: 'radar.config.json', format: 'table', demo: false };
   const seen = new Set();
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (seen.has(arg)) throw new RadarError('usage', 'Duplicate options are not allowed. See --help.');
+    const inlinePattern = args[i].startsWith('--tag-pattern=') ? args[i].slice('--tag-pattern='.length) : undefined;
+    const arg = inlinePattern === undefined ? args[i] : '--tag-pattern';
+    if (seen.has(arg) && arg !== '--tag-pattern') throw new RadarError('usage', 'Duplicate options are not allowed. See --help.');
     seen.add(arg);
     switch (arg) {
       case '--help': options.help = true; break;
       case '--version': options.version = true; break;
       case '--demo': options.demo = true; break;
       case '--include-prereleases': options.includePrereleases = true; break;
+      case '--tag-pattern': {
+        const value = inlinePattern === undefined ? args[++i] : inlinePattern;
+        if (value === undefined || (inlinePattern === undefined && value.startsWith('--'))) throw new RadarError('usage', 'An option value is missing. See --help.');
+        options.tagPatterns ??= [];
+        if (options.tagPatterns.length >= MAX_TAG_PATTERNS) throw new RadarError('usage', '--tag-pattern accepts at most 10 patterns. See --help.');
+        options.tagPatterns.push(value);
+        break;
+      }
       case '--config':
       case '--format':
       case '--since':
@@ -70,6 +87,7 @@ export function parseArgs(args) {
   if (!['table', 'json'].includes(options.format)) throw new RadarError('usage', '--format must be table or json.');
   if (options.demo && seen.has('--config')) throw new RadarError('usage', '--demo uses bundled repositories and cannot be combined with --config.');
   validateWindowOrder(options.since, options.until);
+  compileTagPatterns(options.tagPatterns);
   return options;
 }
 
@@ -95,7 +113,7 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
     }
     if (options.includePrereleases) config.includePrereleases = true;
     if (options.limit !== undefined) config.limit = options.limit;
-    const report = await collectReport(config, { token, fetchImpl, demoData, now, since: options.since, until: options.until });
+    const report = await collectReport(config, { token, fetchImpl, demoData, now, since: options.since, until: options.until, tagPatterns: options.tagPatterns });
     // Redact strings before serializing JSON so token text cannot corrupt its syntax.
     stdout.write(formatReport(redactValues(report, token), format));
     stderr.write(redact(formatIssues(report.issues), token));

@@ -24,7 +24,7 @@ function sourceUrl(value, repo) {
   } catch { return null; }
 }
 
-export function normalizeReleases(items, repo, includePrereleases, secret = '') {
+export function normalizeReleases(items, repo, includePrereleases, secret = '', matchesTag = () => true) {
   const releases = [];
   let invalidCount = 0, duplicateCount = 0;
   const ids = new Set();
@@ -44,6 +44,7 @@ export function normalizeReleases(items, repo, includePrereleases, secret = '') 
     if (ids.has(item.id)) { duplicateCount++; continue; }
     ids.add(item.id);
     if (item.prerelease && !includePrereleases) continue;
+    if (!matchesTag(item.tag_name)) continue;
     const tag = cleanText(redact(item.tag_name, secret), 200);
     releases.push({
       repository: repo,

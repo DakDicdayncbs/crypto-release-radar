@@ -329,6 +329,79 @@ test('empty API responses and valid windows with no matches are complete in tabl
   }
 });
 
+test('tag patterns scan past nonmatching pages and combine OR with dates, prereleases and limits', async (t) => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.endsWith('page=1')) return respond(res, [release(1, 'demo/one', { tag_name: 'other' })], {
+      link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+    });
+    respond(res, [release(2), release(3, 'demo/one', { prerelease: true }), release(4), release(5, 'demo/one', { draft: true })]);
+  });
+  const args = ['--tag-pattern', 'v2', '--tag-pattern', 'v?', '--since', '2026-09-02T12:00:00Z', '--until', '2026-09-03T12:00:00Z', '--limit', '1'];
+  const stable = await h.run(args);
+  assert.equal(stable.code, 0); assert.equal(stable.report.complete, true);
+  assert.deepEqual(stable.report.releases.map(r => r.id), [2]);
+  assert.equal(stable.report.repositories[0].pagesFetched, 2);
+  assert.equal(stable.report.repositories[0].scannedEntries, 5);
+  assert.equal(stable.report.repositories[0].matchingReleases, 1);
+  const preview = await h.run([...args, '--include-prereleases']);
+  assert.equal(preview.code, 0);
+  assert.deepEqual(preview.report.releases.map(r => r.id), [3]);
+  assert.equal(preview.report.repositories[0].matchingReleases, 2);
+  assert.equal(preview.report.repositories[0].selectionLimited, true);
+  assert.equal(h.requests.length, 4);
+  assert.ok(h.requests.every(url => !/pattern|since|until/.test(url)));
+});
+
+test('tag selection cannot hide duplicate IDs or malformed records outside selected tags', async (t) => {
+  const h = await harness(t, (req, res) => respond(res, [
+    release(1, 'demo/one', { tag_name: 'excluded' }), release(1, 'demo/one', { tag_name: 'selected' }),
+    release(2, 'demo/one', { tag_name: 'excluded', body: 7 }),
+  ]));
+  const result = await h.run(['--tag-pattern', 'selected']);
+  assert.equal(result.code, 1); assert.equal(result.report.complete, false);
+  assert.deepEqual(result.report.releases, []);
+  assert.deepEqual(result.report.issues.map(i => i.code), ['invalid_record', 'duplicate_release']);
+});
+
+test('nonmatching tag filters preserve page-budget and later HTTP failures in table and JSON', async (t) => {
+  for (const maxPages of [1, 2]) {
+    const h = await harness(t, (req, res) => {
+      if (req.url.endsWith('page=1')) return respond(res, [release(1)], {
+        link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+      });
+      res.writeHead(500); res.end('private-remote-body');
+    }, { maxPages });
+    for (const format of ['json', 'table']) {
+      const result = await h.run(['--tag-pattern', 'unmatched*'], format);
+      assert.equal(result.code, 1);
+      assert.match(result.stderr, maxPages === 1 ? /page_limit/ : /http_error/);
+      assert.ok(!(result.stdout + result.stderr).includes('private-remote-body'));
+      if (format === 'json') {
+        assert.equal(result.report.complete, false); assert.deepEqual(result.report.releases, []);
+        assert.equal(result.report.repositories[0].matchingReleases, 0);
+        assert.equal(result.report.repositories[0].selectionLimited, false);
+      } else {
+        assert.match(result.stdout, /INCOMPLETE scan/); assert.match(result.stdout, /Tag filter.*unmatched/);
+      }
+    }
+    assert.equal(h.requests.length, maxPages * 2);
+  }
+});
+
+test('empty tag matches and empty API responses are complete without changing exit codes', async (t) => {
+  for (const items of [[], [release(1)]]) {
+    const h = await harness(t, (req, res) => respond(res, items));
+    for (const format of ['json', 'table']) {
+      const result = await h.run(['--tag-pattern', 'unmatched*'], format);
+      assert.equal(result.code, 0); assert.equal(result.stderr, '');
+      if (format === 'json') {
+        assert.equal(result.report.complete, true); assert.deepEqual(result.report.releases, []);
+        assert.deepEqual(result.report.issues, []);
+      } else assert.match(result.stdout, /No matching releases/);
+    }
+  }
+});
+
 test('demo reads neither token nor network, includes synthetic provenance and source links', async () => {
   let stdout = '', stderr = '';
   const code = await runCli(['--demo', '--format', 'json', '--include-prereleases'], {

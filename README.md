@@ -71,6 +71,7 @@ Repository names are compared case-insensitively for duplicates.
 --limit NUMBER            Override display limit per repository
 --since TIMESTAMP         Inclusive publication lower bound (CLI only)
 --until TIMESTAMP         Inclusive publication upper bound (CLI only)
+--tag-pattern GLOB        Match original tags; repeat up to 10 times (OR, CLI only)
 --demo                    Use bundled synthetic data (cannot combine with --config)
 --help                    Usage
 --version                 Version
@@ -147,6 +148,74 @@ exit `1`, including invalid records and duplicates outside the window. A valid
 complete scan with no matches exits `0`; all existing exit codes remain unchanged.
 Omitting `--until` preserves the existing `--since` selection; omitting both bounds
 preserves the unfiltered publication-time selection.
+
+## Tag patterns
+
+Use `--tag-pattern GLOB` to match the **whole original `tag_name`**, with case
+sensitivity. Repeat the option to accept a tag matching **any** pattern (OR).
+That selection is combined with the date window and prerelease policy (AND),
+before sorting and the display limit. Drafts are always excluded. With no patterns,
+tag selection is unchanged. This option is CLI-only; `tagPatterns` is not a config
+field.
+
+| Syntax | Meaning |
+| --- | --- |
+| `*` | Zero or more Unicode code points, including spaces and slashes |
+| `?` | Exactly one Unicode code point |
+| `\*`, `\?`, `\\` | Literal star, question mark, or backslash |
+| Everything else | Literal characters, including `.`, `+`, brackets, braces, parentheses, `^` and `$` |
+
+This is a small glob language, not a regular expression or a shell expression.
+There is no regex, extglob, brace/class expansion, filesystem traversal, or command
+execution. For example, `[12]` matches those four characters, not `1` or `2`;
+`?(v1)` matches one character followed by literal `(v1)`, not an optional `v1`.
+No Unicode normalization or case folding occurs: `?` matches `🚀`, but an `e`
+followed by a combining accent needs two `?` tokens. Matching uses bounded dynamic
+programming, not recursive backtracking: at most pattern tokens × tag code points
+steps per pattern. Existing record validation caps tags at 1024 UTF-16 code units.
+
+Supply **1–10 patterns**, each **1–128 Unicode code points** including escape
+characters. A preliminary cap of **256 UTF-16 code units** applies before Unicode
+iteration. Repeated identical patterns are permitted, count toward the ten-pattern
+limit, and remain in report order. Empty patterns, unfinished backslashes, and
+escapes other than `\*`, `\?`, or `\\` fail with a safe usage error (exit `2`).
+Patterns also reject control and format characters (Unicode `Cc`/`Cf`, including
+C0/C1 controls, bidi controls and zero-width joiners), line/paragraph separators
+(`Zl`/`Zp`), and unpaired surrogates. Ordinary spaces are literal and are not trimmed.
+Validation finishes before config/token access or requests; invalid input is not
+echoed.
+
+In POSIX shells such as bash and zsh, put each pattern in **single quotes** to
+prevent shell expansion and preserve backslashes. Examples:
+
+```sh
+node bin/crypto-release-radar.js --demo --tag-pattern 'v1.*' --tag-pattern 'v0.4.?'
+node bin/crypto-release-radar.js --demo --tag-pattern 'v1.*' --include-prereleases --limit 1 --format json
+node bin/crypto-release-radar.js --demo --tag-pattern 'v*' --since 2026-09-29T00:00:00Z --until 2026-09-29T23:59:59.999Z
+node bin/crypto-release-radar.js --demo --tag-pattern 'v1.\*'
+node bin/crypto-release-radar.js --demo --tag-pattern='--literal*'
+```
+
+The fourth command looks for a literal `v1.*` and has no matches in the demo.
+The `--tag-pattern=GLOB` spelling also works and is required if the pattern starts
+with `--`, so it is not mistaken for another option. Use your shell's literal
+quoting rules if the pattern itself contains a single quote.
+
+Matching happens before display cleanup, truncation to 200 code points, or token
+redaction. A long tag can therefore match a suffix omitted from its displayed
+value, and a cleaned display value need not itself match. No extra raw-tag field
+is exposed. JSON reports include `scope.tagPatterns` (an empty array without a
+filter); tables display the patterns as a JSON array to make escaping visible.
+**Patterns are public report data, not a place for secrets.** The configured
+`GITHUB_TOKEN` is redacted from these fields too, without changing selection.
+
+All received records are still validated and duplicate IDs detected before tag
+selection. Errors outside matching tags remain visible. Pagination continues
+within its normal budget even after a nonmatching page or enough matches for the
+display limit. `matchingReleases` and `selectionLimited` describe the filtered
+selection; `scannedEntries` describes all received entries. A complete empty
+selection exits `0`; an empty incomplete scan still exits `1` and retains its
+diagnostics. Tag filtering does not guarantee completeness or freeze remote data.
 
 ## Authentication and network behavior
 

@@ -2,9 +2,9 @@
 
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
-Entries 06–07 were completed on 2026-10-02; entries 08–45 remain planned. The count is a
-planning aid, not a commit target. Combine or revise future scope when evidence
-makes that useful.
+Entries 06–07 were completed on 2026-10-02 and entry 08 on 2026-10-03; entries
+09–45 remain planned. The count is a planning aid, not a commit target. Combine
+or revise future scope when evidence makes that useful.
 
 One coordinator dispatch = one unchecked item. For each item, preserve user work,
 implement a coherent change, add meaningful tests, update user documentation and
@@ -53,9 +53,13 @@ from the initial baseline publication.
   Table/JSON expose effective bounds and retain all scan errors/completeness.
   README documents repeatable windows and mutable data. All 119 tests pass,
   including boundary/offset/TZ, invalid input, empty/partial scans and compatibility.
-- [ ] **08. Tag pattern selection.** Add bounded glob matching for explicit tag
-  patterns without user regex execution; test escaping, invalid patterns, and
-  interactions with prereleases.
+- [x] **08. Tag pattern selection.** Completed 2026-10-03: repeatable CLI-only
+  `--tag-pattern` uses bounded Unicode glob matching against whole original tags,
+  before display cleanup/redaction. Up to 10 patterns combine with OR and with
+  dates/prereleases via AND. Validation/duplicates precede filtering; scan errors,
+  pagination and limits remain explicit. Scope/table/help/README document patterns
+  and shell quoting. All 136 tests pass, including limits, escaping, Unicode,
+  adversarial patterns, raw/display differences, composition and partial results.
 - [ ] **09. Per-repository policy.** Allow an object entry with individual display
   and prerelease settings; define precedence and preserve simple string configs
   with compatibility tests and migration examples.

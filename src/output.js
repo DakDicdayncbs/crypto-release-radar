@@ -10,6 +10,9 @@ export function formatReport(report, format) {
     `Crypto Release Radar — ${report.mode === 'demo' ? 'SYNTHETIC DEMO' : 'GitHub releases'}`,
     `Result: ${report.complete ? 'complete scan' : 'INCOMPLETE scan'} | ${report.releases.length} selected releases | ${report.generatedAt}`,
     report.digestNotice,
+    report.scope.groups.length
+      ? `Repository selection: groups ${JSON.stringify(report.scope.groups)}`
+      : `Repository selection: ${report.mode === 'demo' ? 'synthetic demo' : 'configured'} repositories`,
     bounds.length
       ? `Publication filter: ${bounds.join(' and ')} (inclusive)`
       : 'Publication filter: none (--since/--until not set)',
@@ -25,7 +28,7 @@ export function formatReport(report, format) {
   for (const release of report.releases) lines.push('', `${release.repository} ${release.tag} — excerpt: ${release.digest.text}`);
   lines.push('', 'Repository scan status:');
   for (const repo of report.repositories) {
-    lines.push(`${repo.repository}: ${repo.complete ? 'complete' : 'INCOMPLETE'}; ${repo.scannedEntries} entries scanned; ${repo.returnedReleases}/${repo.matchingReleases} matching releases shown${repo.selectionLimited ? ' (display limit)' : ''}; policy: limit ${repo.policy.limit}, prereleases ${repo.policy.includePrereleases ? 'included' : 'excluded'}`);
+    lines.push(`${repo.repository}: ${repo.complete ? 'complete' : 'INCOMPLETE'}; ${repo.scannedEntries} entries scanned; ${repo.returnedReleases}/${repo.matchingReleases} matching releases shown${repo.selectionLimited ? ' (display limit)' : ''}; policy: limit ${repo.policy.limit}, prereleases ${repo.policy.includePrereleases ? 'included' : 'excluded'}; API requested: ${repo.requested ? 'yes' : 'no'}`);
   }
   if (!report.complete) lines.push('', 'Results cover retrieved pages only. Newest releases outside those pages may be missing.');
   return lines.join('\n') + '\n';

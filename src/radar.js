@@ -3,19 +3,21 @@ import { compareReleases, normalizeReleases } from './releases.js';
 import { DIGEST_NOTICE } from './text.js';
 import { parseSince, parseUntil, validateWindowOrder } from './publication-window.js';
 import { compileTagPatterns } from './tag-patterns.js';
-import { resolveRepositoryPolicies } from './config.js';
+import { resolveRepositoryPolicies, selectRepositoryGroups } from './config.js';
 
-export async function collectReport(config, { token = '', fetchImpl, demoData, now = () => new Date(), since = null, until = null, tagPatterns = [], policyOverrides } = {}) {
+export async function collectReport(config, { token = '', fetchImpl, demoData, now = () => new Date(), since = null, until = null, tagPatterns = [], policyOverrides, groups } = {}) {
   const sinceUtc = since === null ? null : parseSince(since);
   const untilUtc = until === null ? null : parseUntil(until);
   validateWindowOrder(sinceUtc, untilUtc);
   const tags = compileTagPatterns(tagPatterns);
-  const policies = resolveRepositoryPolicies(config, policyOverrides);
+  const selection = selectRepositoryGroups(config, groups);
+  const policies = resolveRepositoryPolicies({ ...config, repositories: selection.repositories }, policyOverrides);
   const sinceMs = sinceUtc === null ? null : Date.parse(sinceUtc);
   const untilMs = untilUtc === null ? null : Date.parse(untilUtc);
   const releases = [], repositories = [], issues = [];
   let stop = false;
   for (const { repository: repo, ...policy } of policies) {
+    const requested = !stop && !demoData;
     const result = stop
       ? { items: [], pagesFetched: 0, scanComplete: false, issues: [{ code: 'skipped', message: 'Not requested after an authentication, access, or rate-limit failure.' }] }
       : demoData
@@ -30,7 +32,7 @@ export async function collectReport(config, { token = '', fetchImpl, demoData, n
     });
     const selected = matching.sort(compareReleases).slice(0, policy.limit);
     const complete = result.scanComplete && result.issues.length === 0;
-    repositories.push({ repository: repo, policy, complete, pagesFetched: result.pagesFetched, scannedEntries: result.items.length,
+    repositories.push({ repository: repo, policy, requested, complete, pagesFetched: result.pagesFetched, scannedEntries: result.items.length,
       matchingReleases: matching.length, returnedReleases: selected.length,
       selectionLimited: matching.length > selected.length });
     releases.push(...selected);
@@ -46,7 +48,7 @@ export async function collectReport(config, { token = '', fetchImpl, demoData, n
     scope: {
       limitPerRepository: policies.every(p => p.limit === policies[0].limit) ? policies[0].limit : null,
       includePrereleases: policies.every(p => p.includePrereleases === policies[0].includePrereleases) ? policies[0].includePrereleases : null,
-      maxPagesPerRepository: config.maxPages, since: sinceUtc, until: untilUtc, tagPatterns: tags.patterns,
+      maxPagesPerRepository: config.maxPages, since: sinceUtc, until: untilUtc, tagPatterns: tags.patterns, groups: selection.groups,
     },
     repositories,
     releases: releases.sort(compareReleases),

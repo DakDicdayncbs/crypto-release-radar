@@ -9,22 +9,20 @@ export const DEFAULTS = Object.freeze({
 });
 
 const repoPattern = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9_.-]{1,100}$/;
-const keys = new Set(['repositories', ...Object.keys(DEFAULTS)]);
+const keys = new Set(['repositories', 'groups', ...Object.keys(DEFAULTS)]);
 const repositoryKeys = new Set(['slug', 'limit', 'includePrereleases']);
 const invalid = (message) => { throw new RadarError('invalid_config', message); };
+export const MAX_GROUPS = 10;
+const validGroupName = name => typeof name === 'string' && name.length >= 1 && name.length <= 32 &&
+  /^[a-z]/.test(name) && !/[^a-z0-9-]/.test(name);
+const cloneEntry = entry => typeof entry === 'string' ? entry : { ...entry };
 
-export function validateConfig(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    invalid('Config must be a JSON object.');
-  }
-  if (Object.keys(value).some((key) => !keys.has(key))) {
-    invalid('Config contains an unsupported field; see the documented schema.');
-  }
-  if (!Array.isArray(value.repositories) || value.repositories.length < 1 || value.repositories.length > 20) {
-    invalid('Config requires 1–20 explicit owner/repo entries in repositories.');
+function validateRepositoryList(entries) {
+  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 20) {
+    invalid('Each repository list requires 1–20 explicit owner/repo entries.');
   }
   const seen = new Set();
-  const repositories = Array.from(value.repositories, (entry) => {
+  return Array.from(entries, (entry) => {
     if (typeof entry !== 'string') {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry) || !Object.hasOwn(entry, 'slug')) {
         invalid('Each repository must be a slug string or an object with a slug field.');
@@ -45,9 +43,27 @@ export function validateConfig(value) {
     }
     if (seen.has(repo.toLowerCase())) invalid('Duplicate repository entries are not allowed (case-insensitive).');
     seen.add(repo.toLowerCase());
-    return typeof entry === 'string' ? entry : { ...entry };
+    return cloneEntry(entry);
   });
-  const config = { ...DEFAULTS, ...value, repositories };
+}
+
+export function validateConfig(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    invalid('Config must be a JSON object.');
+  }
+  if (Object.keys(value).some((key) => !keys.has(key))) {
+    invalid('Config contains an unsupported field; see the documented schema.');
+  }
+  const config = { ...DEFAULTS, ...value, repositories: validateRepositoryList(value.repositories) };
+  if (Object.hasOwn(value, 'groups')) {
+    if (!value.groups || typeof value.groups !== 'object' || Array.isArray(value.groups) || Object.keys(value.groups).length > MAX_GROUPS) {
+      invalid('groups must be an object with at most 10 named repository lists.');
+    }
+    config.groups = Object.fromEntries(Object.entries(value.groups).map(([name, entries]) => {
+      if (!validGroupName(name)) invalid('Group names must be 1–32 lowercase ASCII letters, digits or hyphens, starting with a letter.');
+      return [name, validateRepositoryList(entries)];
+    }));
+  }
   for (const [key, min, max] of [['limit', 1, 50], ['maxPages', 1, 10], ['timeoutMs', 100, 30000]]) {
     if (!Number.isInteger(config[key]) || config[key] < min || config[key] > max) {
       invalid(`${key} must be an integer between ${min} and ${max}.`);
@@ -55,6 +71,35 @@ export function validateConfig(value) {
   }
   if (typeof config.includePrereleases !== 'boolean') invalid('includePrereleases must be a boolean.');
   return config;
+}
+
+export function validateGroupSelection(names = []) {
+  if (!Array.isArray(names) || names.length > MAX_GROUPS) throw new RadarError('usage', 'Select at most 10 groups. See --help.');
+  const seen = new Set();
+  return Array.from(names, name => {
+    if (!validGroupName(name)) throw new RadarError('usage', 'Group names must be 1–32 lowercase ASCII letters, digits or hyphens, starting with a letter.');
+    if (seen.has(name)) throw new RadarError('usage', 'Repeated group selection is not allowed.');
+    seen.add(name);
+    return name;
+  });
+}
+
+// Config definitions are already validated, including groups not selected here.
+export function selectRepositoryGroups(config, names = []) {
+  const groups = validateGroupSelection(names);
+  if (!groups.length) return { groups, repositories: config.repositories.map(cloneEntry) };
+  const repositories = [], seen = new Set();
+  for (const name of groups) {
+    if (!Object.hasOwn(config.groups ?? {}, name)) throw new RadarError('usage', 'Selected group is not defined in the config.');
+    for (const entry of config.groups[name]) {
+      const slug = (typeof entry === 'string' ? entry : entry.slug).toLowerCase();
+      if (seen.has(slug)) throw new RadarError('usage', 'Selected groups overlap: duplicate repository slugs are not allowed, even with identical policies.');
+      if (repositories.length === 20) throw new RadarError('usage', 'Selected groups exceed the total budget of 20 repositories.');
+      seen.add(slug);
+      repositories.push(cloneEntry(entry));
+    }
+  }
+  return { groups, repositories };
 }
 
 // Config is validated before overrides are applied; false is an explicit policy.

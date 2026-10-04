@@ -1,0 +1,16 @@
+{
+  "repositories": ["bitcoin/bitcoin"],
+  "groups": {
+    "clients": [
+      "bitcoin/bitcoin",
+      { "slug": "ethereum/go-ethereum", "limit": 2, "includePrereleases": false }
+    ],
+    "tooling": [
+      { "slug": "foundry-rs/foundry", "limit": 1, "includePrereleases": true }
+    ]
+  },
+  "limit": 3,
+  "includePrereleases": false,
+  "maxPages": 3,
+  "timeoutMs": 10000
+}

@@ -2,9 +2,9 @@
 
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
-Entries 06–07 were completed on 2026-10-02 and entries 08–09 on 2026-10-03; entries
-10–45 remain planned. The count is a planning aid, not a commit target. Combine
-or revise future scope when evidence makes that useful.
+Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entry
+10 on 2026-10-04; entries 11–45 remain planned. The count is a planning aid, not a
+commit target. Combine or revise future scope when evidence makes that useful.
 
 One coordinator dispatch = one unchecked item. For each item, preserve user work,
 implement a coherent change, add meaningful tests, update user documentation and
@@ -67,8 +67,14 @@ from the initial baseline publication.
   scope summaries for differing policies; README/help document compatibility and
   migration. All 149 tests pass, including precedence, old-config equivalence,
   filters, pagination, partial/skipped results and safe failures/redaction.
-- [ ] **10. Named repository groups.** Add explicit local groups and selection;
-  validate unknown names, duplicates, and expansion budgets. No network discovery.
+- [x] **10. Named repository groups.** Completed 2026-10-04: local `groups` and
+  repeatable `--group` replace the default list in explicit selection/member order.
+  All definitions are validated; unknown/repeated selections, overlapping slugs
+  and expansion above 20 repositories fail before token access or requests.
+  Policies and scan behavior are preserved; additive selected-group/requested
+  metadata, help, README and a runnable config example document the contract.
+  All 165 tests pass, including bounds, unused invalid groups, ordering, overrides,
+  redaction, compatibility and complete/empty/partial/skipped results.
 - [ ] **11. Shared config validation command.** Add a network-free validation mode
   and JSON Schema for editor assistance; test that schema and runtime constraints
   agree on representative valid and invalid configurations.

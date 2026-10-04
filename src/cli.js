@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { readConfig, validateConfig } from './config.js';
+import { readConfig, validateConfig, validateGroupSelection, selectRepositoryGroups, MAX_GROUPS } from './config.js';
 import { RadarError, safeError } from './errors.js';
 import { formatIssues, formatReport } from './output.js';
 import { collectReport } from './radar.js';
@@ -20,6 +20,7 @@ Options:
   --since TIMESTAMP         Include published_at >= TIMESTAMP (inclusive)
   --until TIMESTAMP         Include published_at <= TIMESTAMP (inclusive)
   --tag-pattern GLOB        Match original tags; repeat up to 10 times (OR)
+  --group NAME              Select a local group; repeat for up to 10 distinct groups
   --demo                    Bundled synthetic data, no network or token access
   --help                    Show help
   --version                 Show version
@@ -28,6 +29,12 @@ Config repositories accept slug strings or objects with slug, limit and
 includePrereleases. Precedence per field: CLI > repository object > top-level
 config > defaults (limit 5, includePrereleases false). Explicit false is preserved.
 All config fields are validated even when overridden. Reports show each policy.
+
+Config groups map names to 1–20 explicit repository entries; at most 10 groups.
+Names: 1–32 lowercase ASCII letters/digits/hyphens, starting with a letter.
+Without --group use repositories. With groups, replace that list in CLI group order
+and definition entry order; overlaps and totals above 20 repositories are errors.
+All groups are validated, including unused ones. --group cannot combine with --demo.
 
 --since/--until format: YYYY-MM-DDTHH:mm:ss[.sss](Z|+HH:mm|-HH:mm).
 Use uppercase T/Z, seconds, and a known timezone; optional 1–3 fractional digits.
@@ -54,13 +61,21 @@ export function parseArgs(args) {
   for (let i = 0; i < args.length; i++) {
     const inlinePattern = args[i].startsWith('--tag-pattern=') ? args[i].slice('--tag-pattern='.length) : undefined;
     const arg = inlinePattern === undefined ? args[i] : '--tag-pattern';
-    if (seen.has(arg) && arg !== '--tag-pattern') throw new RadarError('usage', 'Duplicate options are not allowed. See --help.');
+    if (seen.has(arg) && !['--tag-pattern', '--group'].includes(arg)) throw new RadarError('usage', 'Duplicate options are not allowed. See --help.');
     seen.add(arg);
     switch (arg) {
       case '--help': options.help = true; break;
       case '--version': options.version = true; break;
       case '--demo': options.demo = true; break;
       case '--include-prereleases': options.includePrereleases = true; break;
+      case '--group': {
+        const value = args[++i];
+        if (value === undefined || value.startsWith('--')) throw new RadarError('usage', 'An option value is missing. See --help.');
+        options.groups ??= [];
+        if (options.groups.length >= MAX_GROUPS) throw new RadarError('usage', 'Select at most 10 groups. See --help.');
+        options.groups.push(value);
+        break;
+      }
       case '--tag-pattern': {
         const value = inlinePattern === undefined ? args[++i] : inlinePattern;
         if (value === undefined || (inlinePattern === undefined && value.startsWith('--'))) throw new RadarError('usage', 'An option value is missing. See --help.');
@@ -91,6 +106,8 @@ export function parseArgs(args) {
   }
   if (!['table', 'json'].includes(options.format)) throw new RadarError('usage', '--format must be table or json.');
   if (options.demo && seen.has('--config')) throw new RadarError('usage', '--demo uses bundled repositories and cannot be combined with --config.');
+  validateGroupSelection(options.groups);
+  if (options.demo && options.groups?.length) throw new RadarError('usage', '--group cannot be combined with --demo.');
   validateWindowOrder(options.since, options.until);
   compileTagPatterns(options.tagPatterns);
   return options;
@@ -111,6 +128,7 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
       config = validateConfig({ repositories: Object.keys(demoData) });
     } else {
       config = await readConfig(options.configPath);
+      selectRepositoryGroups(config, options.groups); // Resolve errors before token access.
       const suppliedToken = env.GITHUB_TOKEN;
       if (suppliedToken !== undefined && typeof suppliedToken !== 'string') throw new RadarError('invalid_token', 'GITHUB_TOKEN must be a string.');
       token = suppliedToken ?? '';
@@ -118,6 +136,7 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
     }
     const report = await collectReport(config, {
       token, fetchImpl, demoData, now, since: options.since, until: options.until, tagPatterns: options.tagPatterns,
+      groups: options.groups,
       policyOverrides: { limit: options.limit, includePrereleases: options.includePrereleases },
     });
     // Redact strings before serializing JSON so token text cannot corrupt its syntax.

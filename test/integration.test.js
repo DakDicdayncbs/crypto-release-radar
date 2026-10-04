@@ -251,7 +251,7 @@ test('closed windows scan past newer pages and apply bounds before prerelease se
   assert.deepEqual(stable.report.releases.map(r => r.id), [4, 3]);
   assert.equal(stable.report.scope.until, '2026-09-29T10:00:00.125Z');
   assert.deepEqual(stable.report.repositories[0], {
-    repository: 'demo/one', complete: true, pagesFetched: 2, scannedEntries: 6,
+    repository: 'demo/one', complete: true, requested: true, pagesFetched: 2, scannedEntries: 6,
     policy: { limit: 5, includePrereleases: false },
     matchingReleases: 2, returnedReleases: 2, selectionLimited: false,
   });
@@ -473,6 +473,71 @@ test('per-repository prerelease exclusion does not mask malformed or duplicate e
   assert.deepEqual(result.report.issues.map(i => i.code), ['invalid_record', 'duplicate_release']);
   assert.equal(result.report.repositories[0].policy.includePrereleases, false);
   assert.equal(result.report.scope.includePrereleases, false);
+});
+
+test('selected groups define request order and completeness, excluding default and unused repositories', async (t) => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.includes('/one/')) return respond(res, [release(1)]);
+    if (req.url.includes('/two/')) return respond(res, [release(2, 'demo/two', { prerelease: true })]);
+    res.writeHead(404); res.end('unselected-private-error');
+  }, {
+    repositories: ['demo/default'],
+    groups: { first: [{ slug: 'demo/one', limit: 1 }], second: [{ slug: 'demo/two', includePrereleases: true }], unused: ['demo/missing'] },
+  });
+  const result = await h.run(['--group', 'second', '--group', 'first', '--tag-pattern', 'v?', '--since', '2026-09-01T12:00:00Z', '--until', '2026-09-02T12:00:00Z']);
+  assert.equal(result.code, 0); assert.equal(result.stderr, ''); assert.equal(result.report.complete, true);
+  assert.deepEqual(result.report.scope.groups, ['second', 'first']);
+  assert.deepEqual(result.report.repositories.map(r => r.repository), ['demo/two', 'demo/one']);
+  assert.ok(result.report.repositories.every(r => r.requested));
+  assert.deepEqual(result.report.releases.map(r => r.id), [2, 1]);
+  assert.deepEqual(h.requests, ['/repos/demo/two/releases?per_page=100&page=1', '/repos/demo/one/releases?per_page=100&page=1']);
+});
+
+test('group scans retain partial errors, continue pagination and keep selected policies', async (t) => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.includes('/two/')) return respond(res, []);
+    if (req.url.endsWith('page=1')) return respond(res, [release(1)], {
+      link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+    });
+    res.writeHead(500); res.end('private-remote-error');
+  }, { groups: { selected: [{ slug: 'demo/one', limit: 1 }, 'demo/two'] } });
+  for (const [extra, expected] of [[[], [1]], [['--tag-pattern', 'unmatched'], []]]) {
+    const result = await h.run(['--group', 'selected', ...extra]);
+    assert.equal(result.code, 1); assert.equal(result.report.complete, false);
+    assert.deepEqual(result.report.releases.map(r => r.id), expected);
+    assert.deepEqual(result.report.repositories.map(r => [r.requested, r.complete]), [[true, false], [true, true]]);
+    assert.equal(result.report.repositories[0].policy.limit, 1);
+    assert.equal(result.report.issues[0].code, 'http_error');
+    assert.ok(!(result.stdout + result.stderr).includes('private-remote-error'));
+  }
+  assert.equal(h.requests.length, 6);
+});
+
+test('selected group members skipped after authentication failure remain visible but not requested', async (t) => {
+  const h = await harness(t, (req, res) => { res.writeHead(401); res.end('private error'); }, {
+    groups: { selected: ['demo/one', { slug: 'demo/two', includePrereleases: true }] },
+  });
+  const result = await h.run(['--group', 'selected']);
+  assert.equal(result.code, 1); assert.equal(result.report.complete, false);
+  assert.deepEqual(result.report.scope.groups, ['selected']);
+  assert.deepEqual(result.report.repositories.map(r => r.requested), [true, false]);
+  assert.deepEqual(result.report.issues.map(i => i.code), ['unauthorized', 'skipped']);
+  const table = await h.run(['--group', 'selected'], 'table');
+  assert.equal(table.code, 1); assert.match(table.stdout, /Repository selection: groups \["selected"\]/);
+  assert.match(table.stdout, /demo\/two: INCOMPLETE;.*API requested: no/);
+  assert.equal(h.requests.length, 2);
+});
+
+test('empty selected group results are complete in both table and JSON', async (t) => {
+  const h = await harness(t, (req, res) => respond(res, []), { groups: { selected: ['demo/two'] } });
+  const result = await h.run(['--group', 'selected']);
+  assert.equal(result.code, 0); assert.equal(result.stderr, '');
+  assert.equal(result.report.complete, true); assert.deepEqual(result.report.releases, []);
+  assert.equal(result.report.repositories[0].repository, 'demo/two');
+  assert.equal(result.report.repositories[0].requested, true);
+  const table = await h.run(['--group', 'selected'], 'table');
+  assert.equal(table.code, 0); assert.match(table.stdout, /No matching releases/);
+  assert.match(table.stdout, /Repository selection: groups \["selected"\]/);
 });
 
 test('demo reads neither token nor network, includes synthetic provenance and source links', async () => {

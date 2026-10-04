@@ -55,6 +55,7 @@ the report and exit status make that visible.
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `repositories` | required | 1–20 explicit slug strings or repository policy objects; mixed lists allowed |
+| `groups` | omitted | Up to 10 local named lists, each with 1–20 explicit repository entries |
 | `limit` | `5` | Default display limit per repository, 1–50, after filtering and UTC sorting |
 | `includePrereleases` | `false` | Default policy for records GitHub labels as prereleases |
 | `maxPages` | `3` | 1–10 pages per repository, 100 records per page |
@@ -73,6 +74,7 @@ and objects. URLs, credentials, discovery, and duplicate slugs are not accepted.
 --since TIMESTAMP         Inclusive publication lower bound (CLI only)
 --until TIMESTAMP         Inclusive publication upper bound (CLI only)
 --tag-pattern GLOB        Match original tags; repeat up to 10 times (OR, CLI only)
+--group NAME              Select local groups; repeat for up to 10 distinct names
 --demo                    Use bundled synthetic data (cannot combine with --config)
 --help                    Usage
 --version                 Version
@@ -151,6 +153,95 @@ global UTC sort. Draft exclusion, record validation, duplicate detection, scan
 budgets, partial errors, completeness and exit codes are unchanged. Policies also
 apply to repositories whose requests are skipped after authentication/rate errors;
 their displayed policy describes the requested selection, not a successful scan.
+
+### Named repository groups
+
+Define optional local `groups` as an object mapping names to explicit repository
+lists. Each member uses the same slug string or `{ "slug", "limit",
+"includePrereleases" }` format described above. There is no discovery, group
+nesting/reference, external include, regex selection, or remote config loading.
+The top-level `repositories` list is still required, even when groups are selected.
+The runnable [group example](examples/groups.json) contains:
+
+```json
+{
+  "repositories": ["bitcoin/bitcoin"],
+  "groups": {
+    "clients": [
+      "bitcoin/bitcoin",
+      { "slug": "ethereum/go-ethereum", "limit": 2, "includePrereleases": false }
+    ],
+    "tooling": [
+      { "slug": "foundry-rs/foundry", "limit": 1, "includePrereleases": true }
+    ]
+  },
+  "limit": 3,
+  "includePrereleases": false,
+  "maxPages": 3,
+  "timeoutMs": 10000
+}
+```
+
+```sh
+node bin/crypto-release-radar.js --config examples/groups.json
+node bin/crypto-release-radar.js --config examples/groups.json --group clients
+node bin/crypto-release-radar.js --config examples/groups.json --group tooling --group clients --format json
+node bin/crypto-release-radar.js --config examples/groups.json --group clients --limit 4 --include-prereleases
+```
+
+Without `--group`, only top-level `repositories` are selected: the first command
+requests Bitcoin. With one or more groups, their lists **replace** the top-level
+list; they are not appended to it. Groups expand in CLI argument order, with each
+group's members in definition order. Thus the third command requests Foundry,
+Bitcoin, then Geth. This is request/scan-status order; releases retain the existing
+global publication-time UTC sort. Policy precedence remains CLI > selected member
+object > top-level > defaults, including explicit `false`. No group-level policy
+fields are supported. The fourth command applies `limit: 4` and
+`includePrereleases: true` to both selected members.
+
+Names are **1–32 lowercase ASCII letters, digits or hyphens, starting with a
+letter**. They are exact names, not patterns. Use the separate-value spelling
+`--group NAME`. A config may define **0–10 groups**, each containing **1–20 members**
+(at most 200 group-member definitions, plus up to 20 top-level entries). `{}` is
+valid for no definitions; an empty group is not. Select at most **10 distinct
+names** and at most **20 repositories total**. All original per-repository page,
+request and timeout budgets remain unchanged.
+
+Unknown or repeated selections and totals over 20 are safe usage errors (exit
+`2`). Within every list, duplicate slugs are rejected case-insensitively. Across
+**selected** groups, any overlapping slug is also an error, even if its policies
+are identical or CLI overrides would make them identical. There is no silent
+deduplication, policy merging, or repeated repository request. A slug may occur
+in separately selectable groups with different policies, but those groups cannot
+be selected together. A group may overlap the top-level list because the lists
+are alternatives and are never combined.
+
+All definitions, including the top-level list and **unselected groups**, are
+validated before token access or API requests. Invalid names, types, unknown
+member fields, duplicate members, policy values, or oversized definitions are
+configuration errors (exit `2`), even when CLI overrides would hide them. Safe
+diagnostics do not echo arbitrary names, slugs, config values or token text.
+Group names appear in successful reports and should not contain secrets; existing
+token redaction covers them. Configs without `groups` keep their prior behavior.
+`--group` cannot be combined with `--demo`; the unchanged demo uses only bundled
+synthetic repositories and no network or token.
+
+The report remains `schemaVersion: 1`, with two additive fields:
+
+- `scope.groups` lists the selected names in CLI order, or `[]` for the default
+  list/demo. Tables show the same selection.
+- Each `repositories` entry adds boolean `requested`: `true` if a live API request
+  was attempted, including failed attempts; `false` for skipped members and offline
+  demo data. Table scan-status lines show this too. `pagesFetched` still counts
+  successfully fetched pages, so it can be zero even when `requested` is true.
+
+Only selected repositories appear in scan status; unselected definitions are not
+fetched or included in completeness. After authentication/rate errors, remaining
+selected members still appear with `requested: false`, their effective policy,
+and the existing `skipped` issue. A successful empty selection result exits `0`;
+a partial or skipped scan, including one filtered to zero releases, stays
+incomplete and exits `1`. Groups do not change draft exclusion, date/tag filters,
+sorting, display limits, duplicate-record detection, or pagination behavior.
 
 ## Publication windows
 
@@ -320,7 +411,7 @@ it does not stop as soon as `limit` is reached. The GitHub list endpoint's
 `Link` header controls pagination. A full page without that header triggers a
 conservative next-page probe. See [GitHub pagination](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api).
 
-- `complete: true` means every configured repository reached the end of the
+- `complete: true` means every selected repository reached the end of the
   accessible release list without detected errors. It is not a snapshot guarantee:
   releases can change while pagination is in progress.
 - `selectionLimited: true` means a complete or partial scan had more matching

@@ -2,8 +2,8 @@
 
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
-Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entry
-10 on 2026-10-04; entries 11–45 remain planned. The count is a planning aid, not a
+Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entries
+10–11 on 2026-10-04; entries 12–45 remain planned. The count is a planning aid, not a
 commit target. Combine or revise future scope when evidence makes that useful.
 
 One coordinator dispatch = one unchecked item. For each item, preserve user work,
@@ -75,9 +75,15 @@ from the initial baseline publication.
   metadata, help, README and a runnable config example document the contract.
   All 165 tests pass, including bounds, unused invalid groups, ordering, overrides,
   redaction, compatibility and complete/empty/partial/skipped results.
-- [ ] **11. Shared config validation command.** Add a network-free validation mode
-  and JSON Schema for editor assistance; test that schema and runtime constraints
-  agree on representative valid and invalid configurations.
+- [x] **11. Shared config validation command.** Completed 2026-10-04:
+  `--validate-config` uses the scan's shared config reader/validator, checks all
+  definitions without token/network access or file writes, and returns fixed text
+  on success (0), safe stderr on failure (2). Scan options are explicit conflicts.
+  Draft 2020-12 schema and external editor association preserve existing configs;
+  runtime remains authoritative for slug uniqueness and scan group selection.
+  All 176 tests pass, including 210 shared structural cases, four semantic
+  exceptions, schema mutation checks, blocked environment/network access, unchanged
+  files, flag conflicts, both examples and executable behavior. Both demos pass.
 - [ ] **12. Config input resource bounds.** Add bounded file reading and useful
   field-location diagnostics that cannot reflect secret values; test oversized,
   deeply nested, and malformed inputs and document the new limits.

@@ -76,12 +76,98 @@ and objects. URLs, credentials, discovery, and duplicate slugs are not accepted.
 --tag-pattern GLOB        Match original tags; repeat up to 10 times (OR, CLI only)
 --group NAME              Select local groups; repeat for up to 10 distinct names
 --demo                    Use bundled synthetic data (cannot combine with --config)
+--validate-config         Validate the entire local config without network/token access
 --help                    Usage
 --version                 Version
 ```
 
 There are no positional arguments, token flags, custom API URLs, telemetry,
 notifications, downloads, or background jobs.
+
+### Validate a local configuration
+
+```sh
+node bin/crypto-release-radar.js --validate-config --config examples/repos.json
+node bin/crypto-release-radar.js --validate-config --config examples/groups.json
+node bin/crypto-release-radar.js --validate-config
+```
+
+The last command reads `radar.config.json` from the current directory. This mode
+uses the **same `readConfig` / `validateConfig` path as a scan**, including every
+repository and group definition, even unused groups. It checks required fields,
+types, bounds, unknown fields, names, slugs and case-insensitive duplicate slugs
+within each list. It never reads `GITHUB_TOKEN`, calls the API or report collector,
+or writes/modifies files. No config values, paths or tokens are echoed.
+
+Success exits **0**, leaves stderr empty and prints exactly this line to stdout:
+
+```text
+Config is valid locally. Repository existence, access and authentication were not checked.
+```
+
+Usage, unreadable-file, malformed-JSON and invalid-config failures exit **2**, with
+empty stdout and the existing safe `code: message` diagnostic on stderr. There
+is no JSON report/error envelope or exit 1 in validation mode. The command checks
+local validity only: it does not establish repository existence, accessibility,
+credentials, rate limits or release availability.
+
+`--validate-config` is valueless, allowed once, and accepts only `--config PATH`,
+`--help` and `--version`. Help/version show information without reading a file
+(help takes precedence if both are present). As with ordinary commands, all
+arguments must still parse successfully. `--demo`, `--group`, `--format` (even
+`table`), `--limit`, `--include-prereleases`, `--since`, `--until` and
+`--tag-pattern` are conflicts in either order; `--validate-config=true` and
+positional values are also usage errors. Omitted policy values are validated
+with the normal defaults; validation does not save those defaults to the file.
+
+Because no groups are selected, independent groups may overlap or contain more
+than 20 repositories **in total across definitions** within the existing bounds.
+Validation does not promise that every combination of groups can be scanned.
+The scan's shared selection validator remains authoritative for unknown/repeated
+group selections, case-insensitive overlap and the combined 20-repository budget.
+
+### Editor schema
+
+[schemas/config.schema.json](schemas/config.schema.json) uses
+[JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12/json-schema-validation).
+It describes mixed slug/policy entries, groups, required/unknown fields, strict
+ASCII names and slugs, booleans, integers and bounds. Its `default` annotations
+are editor hints; runtime supplies defaults. All `$ref` targets stay within the file.
+
+Associate configuration files **externally**, without adding `$schema` to the
+config: it remains an unsupported runtime field. For example, open this project
+folder in VS Code and merge this into your workspace settings, adjusting the
+file patterns for your own configs:
+
+```json
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["/radar.config.json", "/examples/repos.json", "/examples/groups.json"],
+      "url": "./schemas/config.schema.json"
+    }
+  ]
+}
+```
+
+The mapping belongs in editor settings, **not** in a Radar config. See
+[VS Code's external schema mapping](https://code.visualstudio.com/docs/languages/json#_mapping-to-a-schema-in-the-workspace).
+Editor support for Draft 2020-12 varies (VS Code documents limited support);
+always run `--validate-config` as the final local check.
+
+The schema is an aid, not a complete replacement for runtime validation.
+`uniqueItems` compares **whole entries**: it catches identical entries but cannot
+enforce case-insensitive slug uniqueness across strings and objects or objects
+with different policies. Those duplicates are rejected by runtime in every list,
+including unused groups. CLI group selection constraints described above are
+outside the config schema. Neither the schema nor local validation checks GitHub.
+
+Tests interpret the schema's used standard keywords with a small test-only
+interpreter, compare a shared structural corpus with runtime, and explicitly
+exercise these semantic exceptions. Mutation checks ensure weakened schema rules
+are detected. Unsupported test-interpreter keywords fail explicitly; it is not a
+general JSON Schema implementation or a separate application validator. This
+keeps the application and its offline test suite dependency-free.
 
 ### Individual repository policies
 
@@ -435,7 +521,7 @@ envelope when valid arguments selected JSON; argument parsing failures go to std
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Complete scan (possibly empty or display-limited), demo, help, or version |
+| `0` | Complete scan (possibly empty or display-limited), valid local config, demo, help, or version |
 | `1` | Incomplete scan or API failure; inspect `issues` and stderr |
 | `2` | Usage, configuration, or local failure |
 

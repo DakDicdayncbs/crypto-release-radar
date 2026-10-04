@@ -11,6 +11,7 @@ export const HELP = `Crypto Release Radar 0.1.0 — Node.js 22+
 
 Usage: node bin/crypto-release-radar.js --config examples/repos.json [options]
        node bin/crypto-release-radar.js --demo [options]
+       node bin/crypto-release-radar.js --validate-config [--config PATH]
 
 Options:
   --config PATH             JSON config (default: radar.config.json)
@@ -22,6 +23,7 @@ Options:
   --tag-pattern GLOB        Match original tags; repeat up to 10 times (OR)
   --group NAME              Select a local group; repeat for up to 10 distinct groups
   --demo                    Bundled synthetic data, no network or token access
+  --validate-config         Check the entire local config without network/token access
   --help                    Show help
   --version                 Show version
 
@@ -35,6 +37,14 @@ Names: 1–32 lowercase ASCII letters/digits/hyphens, starting with a letter.
 Without --group use repositories. With groups, replace that list in CLI group order
 and definition entry order; overlaps and totals above 20 repositories are errors.
 All groups are validated, including unused ones. --group cannot combine with --demo.
+
+--validate-config accepts only --config (default: radar.config.json), --help and
+--version. It rejects scan/demo/group/format/override/filter options. Help/version
+show information without validating a file. Validation never writes files and
+checks no repository existence, access or authentication. Success: fixed text,
+exit 0; failure: safe stderr only, exit 2. No config values or paths are printed.
+Editor schema: schemas/config.schema.json (Draft 2020-12); associate externally,
+do not add $schema to config. Runtime also enforces case-insensitive slug uniqueness.
 
 --since/--until format: YYYY-MM-DDTHH:mm:ss[.sss](Z|+HH:mm|-HH:mm).
 Use uppercase T/Z, seconds, and a known timezone; optional 1–3 fractional digits.
@@ -67,6 +77,7 @@ export function parseArgs(args) {
       case '--help': options.help = true; break;
       case '--version': options.version = true; break;
       case '--demo': options.demo = true; break;
+      case '--validate-config': options.validateConfig = true; break;
       case '--include-prereleases': options.includePrereleases = true; break;
       case '--group': {
         const value = args[++i];
@@ -104,6 +115,9 @@ export function parseArgs(args) {
       default: throw new RadarError('usage', 'Unknown option or positional argument. See --help.');
     }
   }
+  if (options.validateConfig && [...seen].some(arg => !['--validate-config', '--config', '--help', '--version'].includes(arg))) {
+    throw new RadarError('usage', '--validate-config accepts only --config, --help and --version.');
+  }
   if (!['table', 'json'].includes(options.format)) throw new RadarError('usage', '--format must be table or json.');
   if (options.demo && seen.has('--config')) throw new RadarError('usage', '--demo uses bundled repositories and cannot be combined with --config.');
   validateGroupSelection(options.groups);
@@ -121,6 +135,11 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
     format = options.format;
     if (options.help) { stdout.write(HELP); return 0; }
     if (options.version) { stdout.write('0.1.0\n'); return 0; }
+    if (options.validateConfig) {
+      await readConfig(options.configPath);
+      stdout.write('Config is valid locally. Repository existence, access and authentication were not checked.\n');
+      return 0;
+    }
     let config, demoData;
     if (options.demo) {
       try { demoData = JSON.parse(await readFile(new URL('../fixtures/demo-releases.json', import.meta.url), 'utf8')); }

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Crypto Release Radar configuration",
+  "description": "Local explicit repository configuration. Run --validate-config for authoritative validation, including case-insensitive slug uniqueness. Associate this schema externally; $schema is not a config field.",
+  "type": "object",
+  "required": ["repositories"],
+  "additionalProperties": false,
+  "properties": {
+    "repositories": { "$ref": "#/$defs/repositoryList" },
+    "groups": {
+      "type": "object",
+      "maxProperties": 10,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^[a-z][a-z0-9-]*(?![\\s\\S])"
+      },
+      "additionalProperties": { "$ref": "#/$defs/repositoryList" },
+      "description": "Optional independent lists. Selected-group overlap and combined budget are checked by the scan CLI, not this config schema or --validate-config."
+    },
+    "limit": { "$ref": "#/$defs/limit", "default": 5 },
+    "includePrereleases": { "type": "boolean", "default": false },
+    "maxPages": { "type": "integer", "minimum": 1, "maximum": 10, "default": 3 },
+    "timeoutMs": { "type": "integer", "minimum": 100, "maximum": 30000, "default": 10000 }
+  },
+  "$defs": {
+    "limit": { "type": "integer", "minimum": 1, "maximum": 50 },
+    "slug": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}(?![\\s\\S])",
+      "not": { "pattern": "/\\.{1,2}(?![\\s\\S])" },
+      "description": "Explicit owner/repo slug; no URLs, credentials, control characters, or repository names '.' and '..'."
+    },
+    "repositoryEntry": {
+      "anyOf": [
+        { "$ref": "#/$defs/slug" },
+        {
+          "type": "object",
+          "required": ["slug"],
+          "additionalProperties": false,
+          "properties": {
+            "slug": { "$ref": "#/$defs/slug" },
+            "limit": { "$ref": "#/$defs/limit" },
+            "includePrereleases": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "repositoryList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/repositoryEntry" },
+      "description": "Runtime also rejects equal slugs across strings and objects, different policies, or letter casing. JSON Schema uniqueItems compares whole entries only."
+    }
+  }
+}

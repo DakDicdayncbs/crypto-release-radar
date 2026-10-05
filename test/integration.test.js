@@ -8,6 +8,14 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { runCli } from '../src/cli.js';
 
+const displayCounts = report => report.repositories.map(r => [
+  r.matchingReleases, r.selectedReleases, r.returnedReleases, r.selectionLimited, r.globalSelectionLimited,
+]);
+const scanState = report => report.repositories.map(r => ({
+  repository: r.repository, policy: r.policy, requested: r.requested,
+  complete: r.complete, pagesFetched: r.pagesFetched, scannedEntries: r.scannedEntries,
+}));
+
 const release = (id, repo = 'demo/one', overrides = {}) => ({
   id, tag_name: `v${id}`, name: `Release ${id}`, draft: false, prerelease: false,
   published_at: `2026-09-${String(id).padStart(2, '0')}T12:00:00Z`,
@@ -622,4 +630,168 @@ test('table exposes page-budget incompleteness and safe diagnostics', async (t) 
   assert.match(stdout, /Newer|Newest releases outside/);
   assert.match(stdout, /https:\/\/github.com\/demo\/one\/releases\/tag\/v1/);
   assert.match(stderr, /page_limit/);
+});
+
+test('total limit follows full pagination, group policies and date/tag/prerelease filters', async t => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.includes('/a/')) return respond(res, [
+      release(7, 'demo/a', { published_at: '2026-09-03T12:00:00Z' }),
+      release(8, 'demo/a', { published_at: '2026-09-04T15:00:00+03:00' }),
+      release(9, 'demo/a', { published_at: '2026-09-04T12:00:00Z', prerelease: true }),
+    ]);
+    if (req.url.endsWith('page=1')) return respond(res, [
+      release(1, 'demo/z', { published_at: '2026-09-02T12:00:00Z' }),
+      release(2, 'demo/z', { published_at: '2026-09-03T12:00:00Z', prerelease: true }),
+      release(10, 'demo/z', { published_at: '2026-09-01T12:00:00Z' }),
+    ], { link: '<https://api.github.com/repos/demo/z/releases?per_page=100&page=2>; rel="next"' });
+    respond(res, [
+      release(3, 'demo/z', { published_at: '2026-09-04T12:00:00Z' }),
+      release(4, 'demo/z', { published_at: '2026-09-04T12:00:00Z', tag_name: 'excluded' }),
+      release(5, 'demo/z'), release(6, 'demo/z', { draft: true }),
+    ]);
+  }, {
+    repositories: ['demo/unused'],
+    groups: { preview: [{ slug: 'demo/z', limit: 2, includePrereleases: true }], stable: [{ slug: 'demo/a', limit: 1 }] },
+  });
+  const args = ['--group', 'preview', '--group', 'stable', '--tag-pattern', 'v*',
+    '--since', '2026-09-02T12:00:00Z', '--until', '2026-09-04T12:00:00Z'];
+  const requests = ['/repos/demo/z/releases?per_page=100&page=1', '/repos/demo/z/releases?per_page=100&page=2', '/repos/demo/a/releases?per_page=100&page=1'];
+  const baseline = await h.run(args);
+  assert.equal(baseline.code, 0); assert.equal(baseline.stderr, '');
+  assert.deepEqual(baseline.report.releases.map(r => [r.repository, r.id]), [['demo/a', 8], ['demo/z', 3], ['demo/z', 2]]);
+  assert.deepEqual(h.requests.splice(0), requests);
+  const limited = await h.run([...args, '--total-limit', '2']);
+  assert.equal(limited.code, 0); assert.equal(limited.report.complete, true);
+  assert.deepEqual(h.requests.splice(0), requests);
+  assert.deepEqual(scanState(limited.report), scanState(baseline.report));
+  assert.deepEqual(limited.report.issues, baseline.report.issues);
+  assert.deepEqual(limited.report.releases.map(r => [r.repository, r.id]), [['demo/a', 8], ['demo/z', 3]]);
+  assert.deepEqual(displayCounts(limited.report), [[3, 2, 1, true, true], [2, 1, 1, true, false]]);
+  assert.deepEqual(limited.report.display, { matchingReleases: 5, selectedReleases: 3, returnedReleases: 2, perRepositoryHiddenReleases: 2, globallyHiddenReleases: 1, globalSelectionLimited: true });
+  const table = await h.run([...args, '--total-limit', '2'], 'table');
+  assert.equal(table.code, 0); assert.equal(table.stderr, '');
+  assert.deepEqual(h.requests.splice(0), requests);
+  assert.match(table.stdout, /5 matching; 3 after per-repository limits; 2 shown; 2 hidden by per-repository limits; 1 hidden by total limit/);
+  assert.match(table.stdout, /demo\/z: complete; 7 entries scanned; 3 matching; 2 after per-repository limit \(truncated\); 1 shown \(total limit\)/);
+  const override = await h.run([...args, '--limit', '1', '--include-prereleases', '--total-limit', '1']);
+  assert.equal(override.code, 0);
+  assert.deepEqual(h.requests.splice(0), requests);
+  assert.deepEqual(override.report.releases.map(r => [r.repository, r.id]), [['demo/a', 9]]);
+  assert.deepEqual(displayCounts(override.report), [[3, 1, 0, true, true], [3, 1, 1, true, false]]);
+});
+
+test('total limit preserves later-page failure, malformed rows, duplicates and independent failed/empty repositories', async t => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.includes('/missing/')) { res.writeHead(404); return res.end('private-remote-error'); }
+    if (req.url.includes('/empty/')) return respond(res, []);
+    if (req.url.includes('/two/')) return respond(res, [release(5, 'demo/two')]);
+    if (req.url.endsWith('page=1')) return respond(res, [release(3), release(2), release(1), release(1), release(4, 'demo/one', { tag_name: 'excluded', body: 7 })], {
+      link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+    });
+    res.writeHead(500); res.end('private-remote-error');
+  }, { repositories: ['demo/one', 'demo/missing', 'demo/empty', 'demo/two'], limit: 2 });
+  const requests = ['/repos/demo/one/releases?per_page=100&page=1', '/repos/demo/one/releases?per_page=100&page=2',
+    '/repos/demo/missing/releases?per_page=100&page=1', '/repos/demo/empty/releases?per_page=100&page=1', '/repos/demo/two/releases?per_page=100&page=1'];
+  const baseline = await h.run(['--tag-pattern', 'v*']);
+  assert.equal(baseline.code, 1);
+  assert.deepEqual(baseline.report.issues.map(i => i.code), ['http_error', 'invalid_record', 'duplicate_release', 'not_found']);
+  assert.deepEqual(h.requests.splice(0), requests);
+  for (const empty of [false, true]) {
+    const args = ['--tag-pattern', 'v*', '--total-limit', '1', ...(empty ? ['--since', '2026-10-01T00:00:00Z'] : [])];
+    const result = await h.run(args);
+    assert.equal(result.code, 1); assert.equal(result.report.complete, false);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.deepEqual(scanState(result.report), scanState(baseline.report));
+    assert.deepEqual(result.report.issues, baseline.report.issues);
+    assert.equal(result.stderr, baseline.stderr);
+    assert.deepEqual(result.report.releases.map(r => r.id), empty ? [] : [5]);
+    assert.deepEqual(displayCounts(result.report), empty
+      ? Array.from({ length: 4 }, () => [0, 0, 0, false, false])
+      : [[3, 2, 0, true, true], [0, 0, 0, false, false], [0, 0, 0, false, false], [1, 1, 1, false, false]]);
+    assert.deepEqual(result.report.display, empty
+      ? { matchingReleases: 0, selectedReleases: 0, returnedReleases: 0, perRepositoryHiddenReleases: 0, globallyHiddenReleases: 0, globalSelectionLimited: false }
+      : { matchingReleases: 4, selectedReleases: 3, returnedReleases: 1, perRepositoryHiddenReleases: 1, globallyHiddenReleases: 2, globalSelectionLimited: true });
+    const table = await h.run(args, 'table');
+    assert.equal(table.code, 1); assert.equal(table.stderr, baseline.stderr);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.match(table.stdout, /INCOMPLETE scan/);
+    assert.match(table.stdout, /demo\/missing: INCOMPLETE/);
+    assert.ok(!(table.stdout + table.stderr + result.stdout).includes('private-remote-error'));
+  }
+});
+
+for (const [status, issue] of [[401, 'unauthorized'], [403, 'forbidden'], [429, 'rate_limited']]) {
+  test(`total limit preserves ${status} and skipped status after collecting enough releases`, async t => {
+    const h = await harness(t, (req, res) => {
+      if (req.url.includes('/one/')) return respond(res, [release(1), release(2)]);
+      res.writeHead(status); res.end('private-remote-error');
+    }, { repositories: ['demo/one', 'demo/denied', 'demo/skipped'] });
+    const requests = ['/repos/demo/one/releases?per_page=100&page=1', '/repos/demo/denied/releases?per_page=100&page=1'];
+    const baseline = await h.run();
+    assert.equal(baseline.code, 1);
+    assert.deepEqual(h.requests.splice(0), requests);
+    const result = await h.run(['--total-limit', '1']);
+    assert.equal(result.code, 1); assert.equal(result.report.complete, false);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.deepEqual(result.report.issues, baseline.report.issues);
+    assert.deepEqual(result.report.issues.map(i => i.code), [issue, 'skipped']);
+    assert.deepEqual(scanState(result.report), scanState(baseline.report));
+    assert.deepEqual(result.report.repositories.map(r => r.requested), [true, true, false]);
+    assert.deepEqual(result.report.releases.map(r => r.id), [2]);
+    assert.deepEqual(displayCounts(result.report), [[2, 2, 1, false, true], [0, 0, 0, false, false], [0, 0, 0, false, false]]);
+    const table = await h.run(['--total-limit', '1'], 'table');
+    assert.equal(table.code, 1); assert.equal(table.stderr, baseline.stderr);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.match(table.stdout, /demo\/skipped: INCOMPLETE; 0 entries scanned; 0 matching; 0 after per-repository limit; 0 shown; policy: limit 5, prereleases excluded; API requested: no/);
+    assert.ok(!(result.stdout + result.stderr + table.stdout).includes('private-remote-error'));
+  });
+}
+
+test('total limit keeps page-budget incompleteness with enough matches or no matches', async t => {
+  const h = await harness(t, (req, res) => respond(res, [release(1), release(2)], {
+    link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+  }), { maxPages: 1 });
+  const baseline = await h.run();
+  assert.equal(baseline.code, 1);
+  assert.deepEqual(h.requests.splice(0), ['/repos/demo/one/releases?per_page=100&page=1']);
+  for (const empty of [false, true]) {
+    const args = ['--total-limit', '1', ...(empty ? ['--tag-pattern', 'absent'] : [])];
+    const result = await h.run(args);
+    assert.equal(result.code, 1); assert.equal(result.report.complete, false);
+    assert.deepEqual(result.report.issues, baseline.report.issues);
+    assert.equal(result.report.issues[0].code, 'page_limit');
+    assert.deepEqual(result.report.releases.map(r => r.id), empty ? [] : [2]);
+    assert.deepEqual(displayCounts(result.report), [empty ? [0, 0, 0, false, false] : [2, 2, 1, false, true]]);
+    assert.deepEqual(h.requests.splice(0), ['/repos/demo/one/releases?per_page=100&page=1']);
+    const table = await h.run(args, 'table');
+    assert.equal(table.code, 1); assert.equal(table.stderr, baseline.stderr);
+    assert.match(table.stdout, /INCOMPLETE scan/);
+    assert.deepEqual(h.requests.splice(0), ['/repos/demo/one/releases?per_page=100&page=1']);
+  }
+});
+
+test('total limit preserves complete empty and wholly failed scans in table and JSON', async t => {
+  for (const kind of ['empty-api', 'empty-filter', 'failed']) {
+    const h = await harness(t, (req, res) => {
+      if (kind === 'failed') { res.writeHead(500); return res.end('private-remote-error'); }
+      respond(res, kind === 'empty-api' ? [] : [release(1)]);
+    });
+    const args = ['--tag-pattern', 'absent'];
+    const baseline = await h.run(args);
+    const requests = ['/repos/demo/one/releases?per_page=100&page=1'];
+    assert.deepEqual(h.requests.splice(0), requests);
+    const result = await h.run([...args, '--total-limit', '1']);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.equal(result.code, kind === 'failed' ? 1 : 0);
+    assert.equal(result.report.complete, kind !== 'failed');
+    assert.deepEqual(result.report.issues, baseline.report.issues);
+    assert.deepEqual(result.report.releases, []);
+    assert.deepEqual(displayCounts(result.report), [[0, 0, 0, false, false]]);
+    assert.deepEqual(result.report.display, { matchingReleases: 0, selectedReleases: 0, returnedReleases: 0, perRepositoryHiddenReleases: 0, globallyHiddenReleases: 0, globalSelectionLimited: false });
+    const table = await h.run([...args, '--total-limit', '1'], 'table');
+    assert.equal(table.code, result.code); assert.equal(table.stderr, baseline.stderr);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.match(table.stdout, /No matching releases/);
+    assert.match(table.stdout, kind === 'failed' ? /INCOMPLETE scan/ : /complete scan/);
+  }
 });

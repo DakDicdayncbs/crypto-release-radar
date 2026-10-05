@@ -5,6 +5,7 @@ import { formatIssues, formatReport } from './output.js';
 import { collectReport } from './radar.js';
 import { parseSince, parseUntil, validateWindowOrder } from './publication-window.js';
 import { compileTagPatterns, MAX_TAG_PATTERNS } from './tag-patterns.js';
+import { parseTotalLimit } from './display-budget.js';
 import { redact, redactValues } from './text.js';
 
 export const HELP = `Crypto Release Radar 0.1.0 — Node.js 22+
@@ -18,6 +19,7 @@ Options:
   --format table|json       Output format (default: table)
   --include-prereleases     Include prereleases in every repository (no drafts)
   --limit NUMBER            Override every repository's display limit (1–50)
+  --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
   --since TIMESTAMP         Include published_at >= TIMESTAMP (inclusive)
   --until TIMESTAMP         Include published_at <= TIMESTAMP (inclusive)
   --tag-pattern GLOB        Match original tags; repeat up to 10 times (OR)
@@ -31,6 +33,14 @@ Config repositories accept slug strings or objects with slug, limit and
 includePrereleases. Precedence per field: CLI > repository object > top-level
 config > defaults (limit 5, includePrereleases false). Explicit false is preserved.
 All config fields are validated even when overridden. Reports show each policy.
+
+--total-limit takes one canonical decimal integer (no sign, leading zero or =).
+It applies after every scan/filter/per-repository limit and the global UTC sort.
+Ties use original repository ascending, then numeric release ID descending.
+It never stops requests or changes completeness, issues or exit codes. Omit it
+to preserve the existing report. With it, display metadata separates matching,
+per-repository selection and global truncation; returnedReleases counts shown rows.
+Allowed with --demo; rejected by --validate-config. It is not a config field.
 
 Config groups map names to 1–20 explicit repository entries; at most 10 groups.
 Names: 1–32 lowercase ASCII letters/digits/hyphens, starting with a letter.
@@ -104,6 +114,7 @@ export function parseArgs(args) {
       case '--format':
       case '--since':
       case '--until':
+      case '--total-limit':
       case '--limit': {
         const value = args[++i];
         if (!value || value.startsWith('--')) throw new RadarError('usage', 'An option value is missing. See --help.');
@@ -111,6 +122,7 @@ export function parseArgs(args) {
         if (arg === '--format') options.format = value;
         if (arg === '--since') options.since = parseSince(value);
         if (arg === '--until') options.until = parseUntil(value);
+        if (arg === '--total-limit') options.totalLimit = parseTotalLimit(value);
         if (arg === '--limit') {
           if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 50) throw new RadarError('usage', '--limit must be an integer between 1 and 50.');
           options.limit = Number(value);
@@ -160,7 +172,7 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
     }
     const report = await collectReport(config, {
       token, fetchImpl, demoData, now, since: options.since, until: options.until, tagPatterns: options.tagPatterns,
-      groups: options.groups,
+      groups: options.groups, totalLimit: options.totalLimit,
       policyOverrides: { limit: options.limit, includePrereleases: options.includePrereleases },
     });
     // Redact strings before serializing JSON so token text cannot corrupt its syntax.

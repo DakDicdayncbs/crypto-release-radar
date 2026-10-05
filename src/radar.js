@@ -4,8 +4,10 @@ import { DIGEST_NOTICE } from './text.js';
 import { parseSince, parseUntil, validateWindowOrder } from './publication-window.js';
 import { compileTagPatterns } from './tag-patterns.js';
 import { resolveRepositoryPolicies, selectRepositoryGroups } from './config.js';
+import { validateTotalLimit } from './display-budget.js';
 
-export async function collectReport(config, { token = '', fetchImpl, demoData, now = () => new Date(), since = null, until = null, tagPatterns = [], policyOverrides, groups } = {}) {
+export async function collectReport(config, { token = '', fetchImpl, demoData, now = () => new Date(), since = null, until = null, tagPatterns = [], policyOverrides, groups, totalLimit } = {}) {
+  validateTotalLimit(totalLimit);
   const sinceUtc = since === null ? null : parseSince(since);
   const untilUtc = until === null ? null : parseUntil(until);
   validateWindowOrder(sinceUtc, untilUtc);
@@ -39,6 +41,26 @@ export async function collectReport(config, { token = '', fetchImpl, demoData, n
     issues.push(...result.issues.map((issue) => ({ repository: repo, ...issue })));
     if (result.issues.some((issue) => ['rate_limited', 'forbidden', 'unauthorized'].includes(issue.code))) stop = true;
   }
+  let displayed = releases.sort(compareReleases), display;
+  if (totalLimit !== undefined) {
+    const selectedReleases = displayed.length;
+    displayed = displayed.slice(0, totalLimit);
+    // Use original repository identities before output redaction, not display text.
+    const returnedCounts = new Map();
+    for (const release of displayed) returnedCounts.set(release.repository, (returnedCounts.get(release.repository) ?? 0) + 1);
+    for (const repo of repositories) {
+      repo.selectedReleases = repo.returnedReleases;
+      repo.returnedReleases = returnedCounts.get(repo.repository) ?? 0;
+      repo.globalSelectionLimited = repo.returnedReleases < repo.selectedReleases;
+    }
+    const matchingReleases = repositories.reduce((sum, repo) => sum + repo.matchingReleases, 0);
+    display = {
+      matchingReleases, selectedReleases, returnedReleases: displayed.length,
+      perRepositoryHiddenReleases: matchingReleases - selectedReleases,
+      globallyHiddenReleases: selectedReleases - displayed.length,
+      globalSelectionLimited: displayed.length < selectedReleases,
+    };
+  }
   return {
     schemaVersion: 1,
     mode: demoData ? 'demo' : 'live',
@@ -49,9 +71,11 @@ export async function collectReport(config, { token = '', fetchImpl, demoData, n
       limitPerRepository: policies.every(p => p.limit === policies[0].limit) ? policies[0].limit : null,
       includePrereleases: policies.every(p => p.includePrereleases === policies[0].includePrereleases) ? policies[0].includePrereleases : null,
       maxPagesPerRepository: config.maxPages, since: sinceUtc, until: untilUtc, tagPatterns: tags.patterns, groups: selection.groups,
+      ...(totalLimit === undefined ? {} : { totalLimit }),
     },
+    ...(display ? { display } : {}),
     repositories,
-    releases: releases.sort(compareReleases),
+    releases: displayed,
     issues,
   };
 }

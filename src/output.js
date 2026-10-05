@@ -8,7 +8,7 @@ export function formatReport(report, format) {
   ].filter(Boolean);
   const lines = [
     `Crypto Release Radar — ${report.mode === 'demo' ? 'SYNTHETIC DEMO' : 'GitHub releases'}`,
-    `Result: ${report.complete ? 'complete scan' : 'INCOMPLETE scan'} | ${report.releases.length} selected releases | ${report.generatedAt}`,
+    `Result: ${report.complete ? 'complete scan' : 'INCOMPLETE scan'} | ${report.releases.length} ${report.display ? 'shown' : 'selected'} releases | ${report.generatedAt}`,
     report.digestNotice,
     report.scope.groups.length
       ? `Repository selection: groups ${JSON.stringify(report.scope.groups)}`
@@ -19,6 +19,9 @@ export function formatReport(report, format) {
     report.scope.tagPatterns.length
       ? `Tag filter (OR, whole original tag): ${JSON.stringify(report.scope.tagPatterns)}`
       : 'Tag filter: none (--tag-pattern not set)',
+    ...(report.display ? [
+      `Display budget: total limit ${report.scope.totalLimit}; ${report.display.matchingReleases} matching; ${report.display.selectedReleases} after per-repository limits; ${report.display.returnedReleases} shown; ${report.display.perRepositoryHiddenReleases} hidden by per-repository limits; ${report.display.globallyHiddenReleases} hidden by total limit`,
+    ] : []),
     '',
     'Repository | Tag | Name | Published (UTC) | Prerelease | Source',
     '--- | --- | --- | --- | --- | ---',
@@ -28,7 +31,10 @@ export function formatReport(report, format) {
   for (const release of report.releases) lines.push('', `${release.repository} ${release.tag} — excerpt: ${release.digest.text}`);
   lines.push('', 'Repository scan status:');
   for (const repo of report.repositories) {
-    lines.push(`${repo.repository}: ${repo.complete ? 'complete' : 'INCOMPLETE'}; ${repo.scannedEntries} entries scanned; ${repo.returnedReleases}/${repo.matchingReleases} matching releases shown${repo.selectionLimited ? ' (display limit)' : ''}; policy: limit ${repo.policy.limit}, prereleases ${repo.policy.includePrereleases ? 'included' : 'excluded'}; API requested: ${repo.requested ? 'yes' : 'no'}`);
+    const selection = report.display
+      ? `${repo.matchingReleases} matching; ${repo.selectedReleases} after per-repository limit${repo.selectionLimited ? ' (truncated)' : ''}; ${repo.returnedReleases} shown${repo.globalSelectionLimited ? ' (total limit)' : ''}`
+      : `${repo.returnedReleases}/${repo.matchingReleases} matching releases shown${repo.selectionLimited ? ' (display limit)' : ''}`;
+    lines.push(`${repo.repository}: ${repo.complete ? 'complete' : 'INCOMPLETE'}; ${repo.scannedEntries} entries scanned; ${selection}; policy: limit ${repo.policy.limit}, prereleases ${repo.policy.includePrereleases ? 'included' : 'excluded'}; API requested: ${repo.requested ? 'yes' : 'no'}`);
   }
   if (!report.complete) lines.push('', 'Results cover retrieved pages only. Newest releases outside those pages may be missing.');
   return lines.join('\n') + '\n';

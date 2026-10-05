@@ -78,6 +78,7 @@ test('validation rejects every scan option in either order and preserves safe us
   const conflicts = [
     ['--demo'], ['--group', 'stable'], ['--format', 'table'], ['--format', 'json'],
     ['--limit', '5'], ['--include-prereleases'], ['--tag-pattern', 'v*'], ['--tag-pattern=v*'],
+    ['--total-limit', '1'],
     ['--since', '2026-10-04T00:00:00Z'], ['--until', '2026-10-04T23:59:59Z'],
   ];
   for (const args of conflicts) {

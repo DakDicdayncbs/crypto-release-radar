@@ -76,6 +76,7 @@ The same reader enforces these limits for scans and `--validate-config`; see
 --format table|json       Table by default
 --include-prereleases     Include prereleases in every repository
 --limit NUMBER            Override every repository's display limit
+--total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
 --since TIMESTAMP         Inclusive publication lower bound (CLI only)
 --until TIMESTAMP         Inclusive publication upper bound (CLI only)
 --tag-pattern GLOB        Match original tags; repeat up to 10 times (OR, CLI only)
@@ -120,7 +121,7 @@ credentials, rate limits or release availability.
 `--help` and `--version`. Help/version show information without reading a file
 (help takes precedence if both are present). As with ordinary commands, all
 arguments must still parse successfully. `--demo`, `--group`, `--format` (even
-`table`), `--limit`, `--include-prereleases`, `--since`, `--until` and
+`table`), `--limit`, `--total-limit`, `--include-prereleases`, `--since`, `--until` and
 `--tag-pattern` are conflicts in either order; `--validate-config=true` and
 positional values are also usage errors. Omitted policy values are validated
 with the normal defaults; validation does not save those defaults to the file.
@@ -320,9 +321,10 @@ their previous scope values and selection. The new policy field is additive, so
 the report version remains unchanged. Token redaction still covers report strings;
 policy limits and booleans remain typed values.
 
-All filters run before per-repository display limits, followed by the existing
-global UTC sort. Draft exclusion, record validation, duplicate detection, scan
-budgets, partial errors, completeness and exit codes are unchanged. Policies also
+All filters run before per-repository display limits, followed by the global UTC
+sort and optional [total display limit](#total-display-limit). Draft exclusion,
+record validation, duplicate detection, scan budgets, partial errors, completeness
+and exit codes are unchanged. Policies also
 apply to repositories whose requests are skipped after authentication/rate errors;
 their displayed policy describes the requested selection, not a successful scan.
 
@@ -471,8 +473,9 @@ Comparison does not depend on the computer's local timezone. JSON exposes the
 effective UTC bounds in `scope.since` and `scope.until`, each `null` when absent;
 the table labels the active bounds as inclusive, or shows that no publication
 filter is set. `matchingReleases` counts records after all filters;
-`selectionLimited` compares that count with the displayed count, and
-`scannedEntries` still includes all retrieved entries.
+`selectionLimited` compares that count with the count after the per-repository
+limit, before any total display limit, and `scannedEntries` still includes all
+retrieved entries.
 
 A publication window **does not guarantee completeness or freeze GitHub data**.
 It makes the filter repeatable, but releases can be added, edited, or removed
@@ -547,10 +550,78 @@ filter); tables display the patterns as a JSON array to make escaping visible.
 All received records are still validated and duplicate IDs detected before tag
 selection. Errors outside matching tags remain visible. Pagination continues
 within its normal budget even after a nonmatching page or enough matches for the
-display limit. `matchingReleases` and `selectionLimited` describe the filtered
-selection; `scannedEntries` describes all received entries. A complete empty
-selection exits `0`; an empty incomplete scan still exits `1` and retains its
+display limits. `matchingReleases` counts filtered records and `selectionLimited`
+describes per-repository truncation; `scannedEntries` describes all received
+entries. A complete empty selection exits `0`; an empty incomplete scan still exits `1` and retains its
 diagnostics. Tag filtering does not guarantee completeness or freeze remote data.
+
+## Total display limit
+
+Use `--total-limit N` to show at most **N releases across all selected repositories**.
+It works with live scans, groups, per-repository policies, date/tag filters and
+the synthetic demo. Omitting it preserves the existing selection, JSON shape and
+table output. It is CLI-only: `totalLimit` and `total-limit` remain invalid
+top-level config fields and repository policy fields, including group member
+policies; the editor schema is unchanged.
+
+```sh
+node bin/crypto-release-radar.js --demo --total-limit 1
+node bin/crypto-release-radar.js --demo --include-prereleases --total-limit 2 --format json
+node bin/crypto-release-radar.js --config examples/groups.json --group clients --limit 4 --total-limit 5
+```
+
+Supply one canonical decimal integer from **1 through 1000**, with a separate
+value: `--total-limit 10`. The upper bound is the existing maximum of 20 selected
+repositories × 50 releases per repository. Zero, signs, leading zeros, fractions,
+exponents, whitespace, missing values, duplicates and `--total-limit=10` are usage
+errors. Validation precedes config/token access and network calls; failure exits
+**2** with safe stderr and empty stdout, even with `--format json`. The flag
+conflicts with `--validate-config` in either order. Valid values may accompany
+`--help`/`--version`, which retain their usual information-only behavior; invalid
+arguments still fail before those options take effect.
+
+The pipeline is: scan the selected repositories within their existing page
+budgets; validate/deduplicate records and apply draft, prerelease, tag and date
+filters; sort and apply each repository's effective `limit`; merge and sort all
+remaining records; then take the first **N**. Both sorts use publication **instant
+descending**, original repository **ascending** (case-sensitive lexical order),
+and numeric release ID **descending** for ties. Original identities are used
+before output redaction. This is not a quota per repository: a repository may
+have matches but no rows in the final display.
+
+With the flag present, JSON retains `schemaVersion: 1` and adds
+`scope.totalLimit` plus a top-level `display` object, even if nothing is hidden:
+
+| `display` field | Meaning within retrieved data |
+| --- | --- |
+| `matchingReleases` | Total matching records after all query filters |
+| `selectedReleases` | Total retained by per-repository limits, before the global cap |
+| `returnedReleases` | Final displayed count, exactly `releases.length` |
+| `perRepositoryHiddenReleases` | Matching minus selected |
+| `globallyHiddenReleases` | Selected minus returned |
+| `globalSelectionLimited` | Whether the global cap actually hid any selected records |
+
+Each repository also gains `selectedReleases` and `globalSelectionLimited` when
+the flag is set. Its existing `returnedReleases` always counts its actual rows in
+the final `releases` array, including zero. `selectionLimited` continues to mean
+**per-repository** truncation: matching exceeds selected. The new
+`globalSelectionLimited` means returned is less than selected. A cap equal to or
+above the selected count hides nothing, so the global flag is false. Counts stay
+numbers and flags stay booleans through token redaction. Without `--total-limit`,
+these new fields are omitted and returned still equals per-repository selected.
+
+The table shows the matching, selected and shown totals, both hidden counts, and
+the corresponding stages for every repository. For example, 7 matching records
+reduced to 5 by per-repository limits and then to 4 by the total limit means
+2 hidden by per-repository limits and 1 hidden by the total limit.
+
+The display budget **never stops requests early** and does not alter `complete`,
+issues, scan metadata, effective policies or exit codes. Failed and skipped
+repositories remain visible even if other repositories fill the display. A
+complete scan truncated for display still exits **0**; a partial scan still
+exits **1**, including when filters leave no displayed records. All counts cover
+retrieved data, not unknown releases beyond failed or unrequested pages. A small
+display limit neither makes the scan exhaustive nor reduces its request budget.
 
 ## Authentication and network behavior
 
@@ -574,20 +645,23 @@ No account credentials are created or modified by this project.
 ## Completeness, sorting, and output
 
 Drafts are always excluded. Prereleases follow the config/CLI setting. Records
-are sorted by the **instant** in `published_at`, then repository and numeric
-release ID for deterministic ties. The output uses UTC ISO timestamps. Tag
-numbers, API page order, and `created_at` do not determine the sort order.
+are sorted by the **instant** in `published_at` descending, then original
+repository ascending and numeric release ID descending for deterministic ties.
+The output uses UTC ISO timestamps. Tag numbers, API page order, and `created_at`
+do not determine the sort order.
 
 The CLI scans every page within its budget before choosing the display subset;
-it does not stop as soon as `limit` is reached. The GitHub list endpoint's
-`Link` header controls pagination. A full page without that header triggers a
+it does not stop as soon as `limit` or `--total-limit` is reached. The GitHub list
+endpoint's `Link` header controls pagination. A full page without that header triggers a
 conservative next-page probe. See [GitHub pagination](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api).
 
 - `complete: true` means every selected repository reached the end of the
   accessible release list without detected errors. It is not a snapshot guarantee:
   releases can change while pagination is in progress.
 - `selectionLimited: true` means a complete or partial scan had more matching
-  releases than the requested **display** limit. This alone is not an error.
+  releases than its **per-repository** display limit. With `--total-limit`,
+  `globalSelectionLimited` separately marks records hidden after global sorting.
+  Neither display limit is an error or changes scan completeness.
 - `complete: false` means a page budget, request failure, invalid response/record,
   or duplicate release ID made the scan incomplete. Valid records from received
   pages remain available, but newer releases may exist outside those pages.
@@ -595,8 +669,9 @@ conservative next-page probe. See [GitHub pagination](https://docs.github.com/en
   incomplete result does not mean the repository has no releases.
 
 JSON contains `schemaVersion`, `mode`, `generatedAt`, `complete`, `digestNotice`,
-`scope`, per-repository scan metadata, `releases`, and `issues`. Individual releases
-contain `repository`, `id`, `name`, `tag`, `publishedAt`, `prerelease`, `url`, and
+`scope`, per-repository scan metadata, `releases`, and `issues`, plus `display`
+when `--total-limit` is set. Individual releases contain `repository`, `id`,
+`name`, `tag`, `publishedAt`, `prerelease`, `url`, and
 `digest: { text, truncated }`. Nullable names fall back to the tag. Issues have
 stable codes and optional `status`, `count`, `retryAfterSeconds`, or `resetAt`.
 

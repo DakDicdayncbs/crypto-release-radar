@@ -3,7 +3,7 @@
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
 Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entries
-10–11 on 2026-10-04, and entry 12 on 2026-10-05; entries 13–45 remain planned.
+10–11 on 2026-10-04, and entries 12–13 on 2026-10-05; entries 14–45 remain planned.
 The count is a planning aid, not a commit target. Combine or revise future scope
 when evidence makes that useful.
 
@@ -96,9 +96,16 @@ from the initial baseline publication.
   All 194 tests and both demos pass, including exact/+1 byte/depth boundaries,
   220 maximum definitions, malformed encodings/nesting, FIFO/symlink races,
   descriptor cleanup and shared scan/validation diagnostics before token access.
-- [ ] **13. Global display budget.** Add an optional total release limit after
-  per-repository selection, with deterministic ties and metadata that distinguishes
-  query filtering from local display truncation.
+- [x] **13. Global display budget.** Completed 2026-10-05: CLI-only
+  `--total-limit` accepts canonical integers 1–1000 and caps the combined display
+  after full scans, filtering, per-repository selection and deterministic global
+  sorting. Opt-in metadata separates matching, selected and actually returned
+  rows, with distinct per-repository/global truncation; default reports retain
+  their shape and behavior. Requests, issues, completeness and exit codes remain
+  independent of display limits. All 210 tests and both demos pass, including
+  boundaries, UTC ties/large IDs, mixed group policies, partial/failed/skipped
+  scans, unchanged fetch sequences, redaction and validation before config/token
+  access. README/help document selection order, metadata and compatibility.
 
 ## Reports and local files — planned
 

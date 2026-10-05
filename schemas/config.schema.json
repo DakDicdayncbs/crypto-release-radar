@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Crypto Release Radar configuration",
-  "description": "Local explicit repository configuration. Run --validate-config for authoritative validation, including case-insensitive slug uniqueness. Associate this schema externally; $schema is not a config field.",
+  "description": "Local explicit repository configuration. Run --validate-config for authoritative validation, including case-insensitive slug uniqueness. File rules (regular file, no final symlink, strict UTF-8 without BOM, at most 131072 bytes including whitespace, nesting depth at most 8 with root container depth 1) are enforced by the reader, not this parsed-value schema. Associate externally; $schema is not a config field.",
   "type": "object",
   "required": ["repositories"],
   "additionalProperties": false,

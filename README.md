@@ -66,6 +66,11 @@ The CLI uses `radar.config.json` by default; that local file is ignored by Git.
 Repository names are compared case-insensitively for duplicates across strings
 and objects. URLs, credentials, discovery, and duplicate slugs are not accepted.
 
+Config files must be regular files, strict UTF-8 without a leading BOM, at most
+**131072 bytes (128 KiB)** including whitespace, and at most **8 nested containers**.
+The same reader enforces these limits for scans and `--validate-config`; see
+[file limits and diagnostics](#file-limits-and-diagnostics) below.
+
 ```text
 --config PATH             Config file
 --format table|json       Table by default
@@ -126,6 +131,83 @@ Validation does not promise that every combination of groups can be scanned.
 The scan's shared selection validator remains authoritative for unknown/repeated
 group selections, case-insensitive overlap and the combined 20-repository budget.
 
+### File limits and diagnostics
+
+The byte limit is inclusive: a file of exactly **131072 UTF-8 bytes** can pass;
+131073 bytes cannot. All bytes count, including whitespace, CRLF line endings,
+and multibyte characters. No trimming, BOM removal, lossy UTF-8 decoding or file
+rewriting is performed. Invalid UTF-8 and a leading BOM are rejected. JSON
+escapes retain the normal JSON meaning; slug/name constraints still apply after
+decoding. Both example configs and 20 default entries plus 10 groups of 20
+maximum-length policy objects fit, including four-space pretty printing. Mixed
+string/object entries remain supported.
+
+Depth counts simultaneously open JSON objects and arrays: the root object or
+array has depth **1**, each nested container adds one, and scalar values add none.
+Depth 8 is allowed by the reader; depth 9 is rejected. A normal config with group
+policy objects needs only depth 4. Quoted braces/brackets and escaped quotes or
+backslashes do not affect depth. An iterative, bounded-stack check runs **before
+JSON.parse**; JSON.parse still validates the complete grammar. A too-deep prefix
+can therefore report `config_depth` even if the remaining document is malformed.
+
+The reader checks file type/size before and after opening, but does not trust
+size metadata alone: it reads into one **131073-byte buffer**, stopping at the
+first extra byte or EOF, and checks size again after EOF. This detects overflow
+with stale metadata and observed file growth without loading an unlimited file.
+The descriptor is closed in a `finally` block, including on read failures. A
+close failure is a read error. Concurrent writes are not an atomic snapshot;
+finish saving a config before running the command.
+
+Directories, FIFOs, devices and a **symlink in the final path component** are
+rejected. Parent-directory symlinks may resolve normally. Read-only opening uses
+[Node's nonblocking and no-follow flags](https://nodejs.org/docs/latest-v22.x/api/fs.html#file-open-constants)
+to guard against replacement with a FIFO or symlink between checks. Bounded config
+file reads require those flags (Linux/macOS); platforms without them fail closed
+with `config_read`. This does not change the offline demo, help or version.
+
+| Code | Meaning |
+| --- | --- |
+| `config_read` | Missing/refused/unreadable input, unsupported safe-open flags, or a filesystem/close failure |
+| `config_size` | Observed file size or bytes read exceed 131072 |
+| `config_encoding` | Invalid UTF-8 or a leading BOM |
+| `config_depth` | Lexically nested containers exceed depth 8 |
+| `config_syntax` | Malformed JSON, including empty input or mismatched/unclosed delimiters |
+| `invalid_config` | Parsed config violates the documented fields, types, lists, names, bounds or slug uniqueness |
+
+Semantic error messages now begin with a **safe logical location**, followed by
+the explanation. These are schema locations, not filesystem paths, JSON Pointer
+expressions, line/column positions, byte offsets or character offsets:
+
+| Location example | Meaning |
+| --- | --- |
+| `$` | Root value, or unknown field in the root object |
+| `$.repositories` | Missing/invalid default list or its length |
+| `$.repositories[2]` | Third entry, or unknown field inside that policy object |
+| `$.repositories[2].slug` | Missing/invalid/duplicate slug in the third policy object |
+| `$.timeoutMs` | A known top-level field |
+| `$.groups[1].name` | Invalid name of the second parsed group |
+| `$.groups[1].entries[2].limit` | Limit of the third entry in the second parsed group |
+
+All indices are **zero-based**. Group indices follow own-property enumeration
+order after JSON parsing: integer-like keys come first in numeric order, followed
+by other keys in insertion order. Valid group names cannot be integer-like, so
+valid names retain their order. `.name` and `.entries` are fixed diagnostic
+segments, not new config fields. Unknown keys point only to their containing
+object; duplicate slugs point to the later entry (or its `.slug`). Arbitrary group
+names, keys, values, token text and paths never enter diagnostics. There are no
+raw parser/system snippets and no source-location claims affected by Unicode or
+CRLF. File/encoding/syntax/depth errors do not invent a semantic field location.
+
+For example, `invalid_config: $.groups[1].entries[2].limit: Repository limit must
+be an integer between 1 and 50.` identifies the field without echoing its value
+or group name. **Compatibility:** semantic errors retain `invalid_config` but
+their message gains a location; malformed JSON now uses `config_syntax` instead
+of `invalid_config`. File resource/encoding errors have the new codes above.
+Use codes rather than matching English messages. Validation still returns 0/2
+with its unchanged success line and stderr-only failures; scan config failures
+still return 2 and preserve the existing JSON error envelope when `--format json`
+is selected. All checks precede overrides, token access and API requests.
+
 ### Editor schema
 
 [schemas/config.schema.json](schemas/config.schema.json) uses
@@ -161,6 +243,10 @@ enforce case-insensitive slug uniqueness across strings and objects or objects
 with different policies. Those duplicates are rejected by runtime in every list,
 including unused groups. CLI group selection constraints described above are
 outside the config schema. Neither the schema nor local validation checks GitHub.
+The schema validates **parsed values**, not file byte counts, encoding, file type
+or pre-parse depth. For example, padding an otherwise valid document past 128 KiB
+does not change schema validity but is rejected by `readConfig`. The file rules
+are documented in the schema description, not invented JSON Schema keywords.
 
 Tests interpret the schema's used standard keywords with a small test-only
 interpreter, compare a shared structural corpus with runtime, and explicitly

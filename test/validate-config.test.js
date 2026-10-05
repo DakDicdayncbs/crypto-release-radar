@@ -65,7 +65,7 @@ test('unreadable and malformed input fail safely without reflecting file paths o
   for (const text of ['', '{"token":"private-sentinel",', 'private-sentinel', '\u0000', 'false trailing']) {
     await writeFile(path, text);
     result = await offlineRun(['--config', path, '--validate-config']);
-    assert.deepEqual(result, { code: 2, stdout: '', stderr: 'invalid_config: Config is not valid JSON.\n' });
+    assert.deepEqual(result, { code: 2, stdout: '', stderr: 'config_syntax: Config is not valid JSON.\n' });
     assert.equal(await readFile(path, 'utf8'), text);
   }
   result = await offlineRun(['--validate-config', '--config', dir]);

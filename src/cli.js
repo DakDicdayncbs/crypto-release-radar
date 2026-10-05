@@ -45,6 +45,11 @@ checks no repository existence, access or authentication. Success: fixed text,
 exit 0; failure: safe stderr only, exit 2. No config values or paths are printed.
 Editor schema: schemas/config.schema.json (Draft 2020-12); associate externally,
 do not add $schema to config. Runtime also enforces case-insensitive slug uniqueness.
+Config files: regular files only (no final symlink), strict UTF-8 without BOM,
+at most 131072 bytes including whitespace and nesting depth 8 (root container = 1).
+File checks require nonblocking/no-follow open support (Linux/macOS). Invalid
+fields use safe logical locations such as $.groups[0].entries[1].limit; group
+indices are zero-based property ordinals, never group names or source offsets.
 
 --since/--until format: YYYY-MM-DDTHH:mm:ss[.sss](Z|+HH:mm|-HH:mm).
 Use uppercase T/Z, seconds, and a known timezone; optional 1–3 fractional digits.

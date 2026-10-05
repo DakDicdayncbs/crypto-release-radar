@@ -3,8 +3,9 @@
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
 Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entries
-10–11 on 2026-10-04; entries 12–45 remain planned. The count is a planning aid, not a
-commit target. Combine or revise future scope when evidence makes that useful.
+10–11 on 2026-10-04, and entry 12 on 2026-10-05; entries 13–45 remain planned.
+The count is a planning aid, not a commit target. Combine or revise future scope
+when evidence makes that useful.
 
 One coordinator dispatch = one unchecked item. For each item, preserve user work,
 implement a coherent change, add meaningful tests, update user documentation and
@@ -84,9 +85,17 @@ from the initial baseline publication.
   All 176 tests pass, including 210 shared structural cases, four semantic
   exceptions, schema mutation checks, blocked environment/network access, unchanged
   files, flag conflicts, both examples and executable behavior. Both demos pass.
-- [ ] **12. Config input resource bounds.** Add bounded file reading and useful
-  field-location diagnostics that cannot reflect secret values; test oversized,
-  deeply nested, and malformed inputs and document the new limits.
+- [x] **12. Config input resource bounds.** Completed 2026-10-05: shared config
+  reading accepts regular files up to 131072 bytes, strict UTF-8 without BOM and
+  nesting depth at most 8 before JSON.parse. Bounded actual reads, post-open/EOF
+  size checks, nonblocking/no-follow opening and guaranteed close attempts cover
+  growth, short reads, nonregular inputs and failure paths. Semantic diagnostics
+  use fixed field segments and entry/group ordinals without reflecting names,
+  values, paths or parser/system snippets. Document distinct read/resource/syntax
+  codes, message compatibility, platform/symlink policy and schema/file limits.
+  All 194 tests and both demos pass, including exact/+1 byte/depth boundaries,
+  220 maximum definitions, malformed encodings/nesting, FIFO/symlink races,
+  descriptor cleanup and shared scan/validation diagnostics before token access.
 - [ ] **13. Global display budget.** Add an optional total release limit after
   per-repository selection, with deterministic ties and metadata that distinguishes
   query filtering from local display truncation.

@@ -2,7 +2,16 @@
 const base = { repositories: ['demo/base'] };
 const repos = count => Array.from({ length: count }, (_, i) => `demo/r${i}`);
 const groups = count => Object.fromEntries(Array.from({ length: count }, (_, i) => [`g${i}`, repos(20)]));
+const largestEntries = () => Array.from({ length: 20 }, (_, i) => ({
+  slug: 'a'.repeat(39) + '/' + String(i).padStart(100, 'r'), limit: 50, includePrereleases: true,
+}));
+export const maximumDefinitions = {
+  repositories: largestEntries(),
+  groups: Object.fromEntries(Array.from({ length: 10 }, (_, i) => ['g' + String(i).padStart(31, 'x'), largestEntries()])),
+  limit: 50, includePrereleases: true, maxPages: 10, timeoutMs: 30000,
+};
 export const structuralCases = [
+  ['all maximum definitions and policies', maximumDefinitions, true],
   ['legacy strings', { repositories: ['a/b', 'Owner/Repo'] }, true],
   ['mixed policies', { repositories: ['a/b', { slug: 'demo/c', limit: 1, includePrereleases: false }], includePrereleases: true }, true],
   ['max list', { repositories: repos(20) }, true],

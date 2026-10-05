@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
-import { validateConfig, selectRepositoryGroups } from '../src/config.js';
+import { readConfig, validateConfig, selectRepositoryGroups } from '../src/config.js';
+import { MAX_CONFIG_BYTES } from '../src/config-file.js';
 import { structuralCases, semanticExceptions } from '../test-support/config-corpus.js';
 
 const schema = JSON.parse(await readFile(new URL('../schemas/config.schema.json', import.meta.url), 'utf8'));
@@ -97,6 +100,18 @@ const runtimeAccepts = value => {
   try { validateConfig(value); return true; }
   catch (error) { assert.equal(error.code, 'invalid_config'); return false; }
 };
+
+test('schema validity of parsed values does not override serialized file byte bounds', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'radar-schema-bounds-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const path = join(dir, 'oversized.json');
+  const text = JSON.stringify({ repositories: ['a/b'] }) + ' '.repeat(MAX_CONFIG_BYTES);
+  const value = JSON.parse(text);
+  assert.equal(accepts(value), true);
+  assert.equal(runtimeAccepts(value), true);
+  await writeFile(path, text);
+  await assert.rejects(readConfig(path), { code: 'config_size' });
+});
 
 test('Draft 2020-12 schema and runtime agree across the structural corpus', () => {
   assert.equal(schema.$schema, 'https://json-schema.org/draft/2020-12/schema');

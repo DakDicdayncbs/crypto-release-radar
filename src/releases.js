@@ -13,7 +13,7 @@ export function publishedDate(value) {
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
-function sourceUrl(value, repo) {
+export function sourceUrl(value, repo) {
   if (typeof value !== 'string' || value.length > 4096) return null;
   try {
     const url = new URL(value);

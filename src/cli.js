@@ -16,7 +16,7 @@ Usage: node bin/crypto-release-radar.js --config examples/repos.json [options]
 
 Options:
   --config PATH             JSON config (default: radar.config.json)
-  --format table|json       Output format (default: table)
+  --format FORMAT          table (default), json, or markdown
   --include-prereleases     Include prereleases in every repository (no drafts)
   --limit NUMBER            Override every repository's display limit (1–50)
   --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
@@ -28,6 +28,12 @@ Options:
   --validate-config         Check the entire local config without network/token access
   --help                    Show help
   --version                 Show version
+
+--format markdown writes a standalone report to stdout with safe GitHub source
+links, query/policy/display details, scan status and issues. Redirect stdout to
+save it; check exit status (0 complete, 1 incomplete, 2 fatal). Fatal errors leave
+Markdown stdout empty. Untrusted text is escaped; redacted URLs stay plain text.
+Demo provenance and automatic, unverified excerpt notices remain visible.
 
 Config repositories accept slug strings or objects with slug, limit and
 includePrereleases. Precedence per field: CLI > repository object > top-level
@@ -135,7 +141,7 @@ export function parseArgs(args) {
   if (options.validateConfig && [...seen].some(arg => !['--validate-config', '--config', '--help', '--version'].includes(arg))) {
     throw new RadarError('usage', '--validate-config accepts only --config, --help and --version.');
   }
-  if (!['table', 'json'].includes(options.format)) throw new RadarError('usage', '--format must be table or json.');
+  if (!['table', 'json', 'markdown'].includes(options.format)) throw new RadarError('usage', '--format must be table, json or markdown.');
   if (options.demo && seen.has('--config')) throw new RadarError('usage', '--demo uses bundled repositories and cannot be combined with --config.');
   validateGroupSelection(options.groups);
   if (options.demo && options.groups?.length) throw new RadarError('usage', '--group cannot be combined with --demo.');
@@ -175,7 +181,7 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
       groups: options.groups, totalLimit: options.totalLimit,
       policyOverrides: { limit: options.limit, includePrereleases: options.includePrereleases },
     });
-    // Redact strings before serializing JSON so token text cannot corrupt its syntax.
+    // Redact strings before serialization/Markdown escaping; preserve typed metadata.
     stdout.write(formatReport(redactValues(report, token), format));
     stderr.write(redact(formatIssues(report.issues), token));
     return report.complete ? 0 : 1;

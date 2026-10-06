@@ -15,6 +15,7 @@ const scanState = report => report.repositories.map(r => ({
   repository: r.repository, policy: r.policy, requested: r.requested,
   complete: r.complete, pagesFetched: r.pagesFetched, scannedEntries: r.scannedEntries,
 }));
+const markdownIds = text => [...text.matchAll(/^- Release ID: (\d+)\.$/gm)].map(match => Number(match[1]));
 
 const release = (id, repo = 'demo/one', overrides = {}) => ({
   id, tag_name: `v${id}`, name: `Release ${id}`, draft: false, prerelease: false,
@@ -793,5 +794,124 @@ test('total limit preserves complete empty and wholly failed scans in table and 
     assert.deepEqual(h.requests.splice(0), requests);
     assert.match(table.stdout, /No matching releases/);
     assert.match(table.stdout, kind === 'failed' ? /INCOMPLETE scan/ : /complete scan/);
+  }
+});
+
+test('Markdown and JSON preserve paginated group selection, mixed policies, filters and global limits', async t => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.includes('/a/')) return respond(res, [
+      release(4, 'demo/a'), release(5, 'demo/a', { published_at: '2026-09-04T12:00:00Z', prerelease: true }),
+    ]);
+    if (req.url.endsWith('page=1')) return respond(res, [release(1, 'demo/z'), release(2, 'demo/z', { prerelease: true })], {
+      link: '<https://api.github.com/repos/demo/z/releases?per_page=100&page=2>; rel="next"',
+    });
+    respond(res, [release(3, 'demo/z'), release(6, 'demo/z', { tag_name: 'excluded' })]);
+  }, {
+    repositories: ['demo/unused'], groups: { preview: [{ slug: 'demo/z', limit: 2, includePrereleases: true }], stable: [{ slug: 'demo/a', limit: 1 }] },
+  });
+  const args = ['--group', 'preview', '--group', 'stable', '--since', '2026-09-02T12:00:00Z', '--until', '2026-09-04T15:00:00+03:00', '--tag-pattern', 'v*'];
+  const requests = ['/repos/demo/z/releases?per_page=100&page=1', '/repos/demo/z/releases?per_page=100&page=2', '/repos/demo/a/releases?per_page=100&page=1'];
+  for (const [extra, expectedIds, matching, selected] of [
+    [['--total-limit', '2'], [4, 3], 3, 3],
+    [['--limit', '1', '--include-prereleases', '--total-limit', '1'], [5], 4, 2],
+  ]) {
+    const json = await h.run([...args, ...extra]);
+    assert.equal(json.code, 0); assert.equal(json.report.complete, true);
+    assert.deepEqual(json.report.releases.map(r => r.id), expectedIds);
+    assert.deepEqual(h.requests.splice(0), requests);
+    const markdown = await h.run([...args, ...extra], 'markdown');
+    assert.equal(markdown.code, json.code); assert.equal(markdown.stderr, json.stderr);
+    assert.deepEqual(markdownIds(markdown.stdout), expectedIds);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.ok(markdown.stdout.includes('**Result: COMPLETE scan | ' + expectedIds.length + ' shown releases**'));
+    assert.ok(markdown.stdout.includes(`Matching: ${matching}; after per-repository limits: ${selected}; shown: ${expectedIds.length}.`));
+    assert.ok(markdown.stdout.includes(String.raw`groups \[\"preview\"\,\"stable\"\]`));
+    assert.ok(markdown.stdout.includes(String.raw`Published from (inclusive): 2026\-09\-02T12&#58;00&#58;00&#46;000Z`));
+    assert.ok(markdown.stdout.includes(String.raw`Published through (inclusive): 2026\-09\-04T12&#58;00&#58;00&#46;000Z`));
+    assert.ok(markdown.stdout.includes(String.raw`Tag patterns (OR, whole original tag): \[\"v\*\"\]`));
+    assert.match(markdown.stdout, /Pages fetched: 2 \/ 3; entries scanned: 4\./);
+    assert.ok(!markdown.stdout.includes('unused'));
+    for (const release of json.report.releases) assert.ok(markdown.stdout.includes('](' + release.url + ')'));
+    if (selected === 3) {
+      assert.match(markdown.stdout, /Prereleases: varies by repository/);
+      assert.match(markdown.stdout, /Policy: per-repository limit 2; prereleases included/);
+      assert.match(markdown.stdout, /Policy: per-repository limit 1; prereleases excluded/);
+    } else {
+      assert.equal((markdown.stdout.match(/Policy: per-repository limit 1; prereleases included/g) ?? []).length, 2);
+    }
+  }
+});
+
+test('Markdown retains later-page, malformed, duplicate, failed, rate-limited and skipped issues despite display/filters', async t => {
+  const h = await harness(t, (req, res) => {
+    if (req.url.includes('/missing/')) { res.writeHead(404); return res.end('private-remote-error'); }
+    if (req.url.includes('/denied/')) { res.writeHead(429, { 'retry-after': '0' }); return res.end('private-remote-error'); }
+    if (req.url.endsWith('page=1')) return respond(res, [release(1), release(2), release(2), release(3, 'demo/one', { body: 7 })], {
+      link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+    });
+    res.writeHead(500); res.end('private-remote-error');
+  }, { repositories: ['demo/one', 'demo/missing', 'demo/denied', 'demo/skipped'] });
+  const requests = ['/repos/demo/one/releases?per_page=100&page=1', '/repos/demo/one/releases?per_page=100&page=2', '/repos/demo/missing/releases?per_page=100&page=1', '/repos/demo/denied/releases?per_page=100&page=1'];
+  for (const empty of [false, true]) {
+    const args = ['--total-limit', '1', ...(empty ? ['--tag-pattern', 'absent'] : [])];
+    const json = await h.run(args);
+    assert.equal(json.code, 1); assert.equal(json.report.complete, false);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.deepEqual(json.report.issues.map(i => i.code), ['http_error', 'invalid_record', 'duplicate_release', 'not_found', 'rate_limited', 'skipped']);
+    const markdown = await h.run(args, 'markdown');
+    assert.equal(markdown.code, 1); assert.equal(markdown.stderr, json.stderr);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.deepEqual(markdownIds(markdown.stdout), empty ? [] : [2]);
+    assert.deepEqual(markdownIds(markdown.stdout), json.report.releases.map(r => r.id));
+    assert.match(markdown.stdout, /\*\*Result: INCOMPLETE scan/);
+    for (const code of ['http\\_error', 'invalid\\_record', 'duplicate\\_release', 'not\\_found', 'rate\\_limited', 'skipped']) {
+      assert.ok(markdown.stdout.includes('**' + code + '**'), code);
+    }
+    assert.ok(markdown.stdout.includes(String.raw`### demo\/skipped`));
+    assert.match(markdown.stdout, /Status: \*\*INCOMPLETE\*\*; API requested: no\./);
+    assert.match(markdown.stdout, /Pages fetched: 0 \/ 3; entries scanned: 0\./);
+    assert.match(markdown.stdout, /retry after 0s/);
+    assert.ok(!(markdown.stdout + markdown.stderr).includes('private-remote-error'));
+    if (empty) assert.match(markdown.stdout, /incomplete scan does not establish that the repositories have no releases/);
+    else assert.match(markdown.stdout, /hidden by total limit: 1\./);
+  }
+});
+
+test('Markdown preserves page-budget issues for displayed and empty selections', async t => {
+  const h = await harness(t, (req, res) => respond(res, [release(1), release(2)], {
+    link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
+  }), { maxPages: 1 });
+  for (const empty of [false, true]) {
+    const args = ['--total-limit', '1', ...(empty ? ['--since', '2026-10-01T00:00:00Z'] : [])];
+    const json = await h.run(args);
+    const markdown = await h.run(args, 'markdown');
+    assert.equal(json.code, 1); assert.equal(markdown.code, 1); assert.equal(markdown.stderr, json.stderr);
+    assert.deepEqual(h.requests.splice(0), Array(2).fill('/repos/demo/one/releases?per_page=100&page=1'));
+    assert.deepEqual(markdownIds(markdown.stdout), empty ? [] : [2]);
+    assert.ok(markdown.stdout.includes('**page\\_limit**'));
+    assert.match(markdown.stdout, /Pages fetched: 1 \/ 1/);
+    assert.match(markdown.stdout, /\*\*Result: INCOMPLETE scan/);
+    if (empty) assert.match(markdown.stdout, /incomplete scan does not establish/);
+  }
+});
+
+test('Markdown and JSON distinguish complete empty queries from wholly failed scans', async t => {
+  for (const kind of ['empty-api', 'empty-filter', 'failed']) {
+    const h = await harness(t, (req, res) => {
+      if (kind === 'failed') { res.writeHead(500); return res.end('private-remote-error'); }
+      respond(res, kind === 'empty-api' ? [] : [release(1)]);
+    });
+    const args = ['--tag-pattern', 'absent'];
+    const json = await h.run(args);
+    const markdown = await h.run(args, 'markdown');
+    assert.equal(markdown.code, kind === 'failed' ? 1 : 0);
+    assert.equal(markdown.code, json.code); assert.equal(markdown.stderr, json.stderr);
+    assert.deepEqual(markdownIds(markdown.stdout), []);
+    assert.deepEqual(h.requests, Array(2).fill('/repos/demo/one/releases?per_page=100&page=1'));
+    assert.match(markdown.stdout, /No matching releases in the retrieved data/);
+    if (kind === 'failed') {
+      assert.match(markdown.stdout, /incomplete scan does not establish/);
+      assert.ok(markdown.stdout.includes('**http\\_error**'));
+    } else assert.match(markdown.stdout, /\*\*Result: COMPLETE scan \| 0 shown releases\*\*/);
   }
 });

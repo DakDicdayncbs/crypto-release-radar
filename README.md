@@ -1,7 +1,7 @@
 # Crypto Release Radar
 
 A small Node.js 22+ CLI that reads an explicit repository list and turns published
-GitHub releases into a table or JSON report. No runtime or development dependencies.
+GitHub releases into a table, JSON or Markdown report. No runtime or development dependencies.
 
 It shows the repository, release name, tag, publication time in UTC, prerelease
 flag, source link, and a short automatic excerpt of the release notes. It never
@@ -22,6 +22,7 @@ npm ci --ignore-scripts --offline --no-audit --no-fund
 npm test
 npm run demo
 node bin/crypto-release-radar.js --demo --format json --include-prereleases
+node bin/crypto-release-radar.js --demo --format markdown
 ```
 
 The demo never uses the network or reads a token. All entries under `radar-demo/*`
@@ -73,7 +74,7 @@ The same reader enforces these limits for scans and `--validate-config`; see
 
 ```text
 --config PATH             Config file
---format table|json       Table by default
+--format FORMAT           table (default), json, or markdown
 --include-prereleases     Include prereleases in every repository
 --limit NUMBER            Override every repository's display limit
 --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
@@ -676,15 +677,97 @@ when `--total-limit` is set. Individual releases contain `repository`, `id`,
 stable codes and optional `status`, `count`, `retryAfterSeconds`, or `resetAt`.
 
 Output goes to stdout. Diagnostics always go to stderr; JSON also embeds them in
-`issues`. Use the direct `node` command when piping JSON, because `npm run` adds
-its own script banner. Fatal config/local errors produce a smaller JSON error
-envelope when valid arguments selected JSON; argument parsing failures go to stderr.
+`issues` and Markdown includes an Issues section. Use the direct `node` command
+when piping JSON or Markdown, because `npm run` adds its own script banner.
+Fatal config/local errors produce a smaller JSON error envelope when valid
+arguments selected JSON; fatal errors in Markdown and argument parsing failures
+leave stdout empty and report safe diagnostics on stderr.
 
 | Exit | Meaning |
 | --- | --- |
 | `0` | Complete scan (possibly empty or display-limited), valid local config, demo, help, or version |
 | `1` | Incomplete scan or API failure; inspect `issues` and stderr |
 | `2` | Usage, configuration, or local failure |
+
+## Markdown reports
+
+Select `--format markdown` for a standalone document that can be read after
+redirecting stdout. The format uses headings, paragraphs, lists and explicit
+source links; it adds no dependencies, HTML, image embeds or network requests.
+
+```sh
+node bin/crypto-release-radar.js --demo --format markdown
+node bin/crypto-release-radar.js --config examples/groups.json --group clients --format markdown --total-limit 5 > release-report.md
+node bin/crypto-release-radar.js --demo --format markdown --include-prereleases --since 2026-09-29T00:00:00Z --tag-pattern 'v*' > demo-report.md
+```
+
+Redirection is performed by the shell; the CLI has no `--output` option and does
+not create files itself. Choose a new filename to retain earlier reports. Keep
+stderr separate so diagnostics do not become document content. In scripts,
+capture the exit status even under `set -e`, for example:
+
+```sh
+if node bin/crypto-release-radar.js --config examples/repos.json --format markdown > release-report.md; then
+  radar_status=0
+else
+  radar_status=$?
+fi
+```
+
+Status **0** is a complete report, including no matches or a limited display.
+Status **1** still provides a usable report, prominently marked **INCOMPLETE**;
+read its Issues section. Status **2** means a fatal configuration, usage or local
+failure, with no Markdown report on stdout. A redirection can still create an
+empty file in that case. Check the status before using the file. Help and version
+retain their informational text behavior, even with `--format markdown`.
+
+Every report includes:
+
+- Generation time in UTC, live or explicitly fictional synthetic-demo provenance,
+  and complete/incomplete status near the beginning.
+- Inclusive publication bounds, original tag patterns, selected groups, effective
+  prerelease and limit summaries, page budgets, and matching/selected/shown counts.
+  Mixed policies are labeled and detailed separately for each repository.
+- Releases in the same order as table/JSON, with repository identity,
+  displayed name/tag, numeric ID, UTC publication time, prerelease flag and a
+  GitHub source link. Excerpts remain automatic and unverified, with truncation
+  explicitly shown. Demo links remain labeled fictional.
+- Every selected repository, including failed and skipped requests: status,
+  whether the API was requested, pages fetched versus budget, scanned entries,
+  effective policy, matching and returned counts, and both kinds of hidden rows.
+- All safe issues, including repository, code, message and available HTTP status,
+  count, retry delay or reset time. They also remain on stderr as before.
+
+Empty incomplete reports explicitly say that no displayed matches do **not**
+establish the absence of releases. Limits only affect display: Markdown uses the
+same normalized, token-redacted report as JSON, preserving requests, filtering,
+deduplication, policies, completeness and exit codes. Formatting does not mutate
+that report or change numeric/boolean metadata. Table and JSON remain unchanged.
+
+Text is emitted literally using [CommonMark escaping and character references](https://spec.commonmark.org/0.31.2/#backslash-escapes).
+Line breaks/controls are flattened; punctuation, backticks, backslashes, brackets,
+pipes and HTML characters are escaped in headings, prose, source labels, filters
+and diagnostics. Colons, periods and at-signs use character references so
+[GFM bare URL/email autolinks](https://github.github.com/gfm/#autolinks-extension-)
+cannot create extra active links. Raw Markdown contains escapes that render as
+ordinary punctuation; author-provided Markdown/HTML is never interpreted.
+
+Source URLs are revalidated **after token redaction** against the same HTTPS
+GitHub repository/release-path rules used during normalization, without credentials,
+query strings or fragments. Markdown delimiters in destinations, including
+parentheses/brackets, are percent-encoded; existing valid percent escapes are
+preserved, spaces are encoded, and stray percent signs become `%25`. A redaction
+placeholder or an invalid source leaves escaped plain text labeled as unavailable
+for linking. The formatter never reconstructs a secret-containing URL. These are
+CommonMark/GFM documents; arbitrary renderer plugins that reinterpret literal text
+are outside this format contract.
+
+`markdown` is case-sensitive; `md`, `Markdown`, `--format=markdown`, duplicate
+format flags and missing values are usage errors. Like other formats, it conflicts
+with `--validate-config`. Config fields and report schema versions are unchanged.
+The [normal](test-support/markdown-normal.md), [empty](test-support/markdown-empty.md)
+and [partial](test-support/markdown-partial.md) documents are fixed test expectations,
+not observations from a real repository.
 
 ## Errors and digest limits
 

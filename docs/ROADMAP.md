@@ -3,7 +3,8 @@
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
 Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entries
-10–11 on 2026-10-04, and entries 12–13 on 2026-10-05; entries 14–45 remain planned.
+10–11 on 2026-10-04, entries 12–13 on 2026-10-05, and entry 14 on 2026-10-06;
+entries 15–45 remain planned.
 The count is a planning aid, not a commit target. Combine or revise future scope
 when evidence makes that useful.
 
@@ -107,11 +108,22 @@ from the initial baseline publication.
   scans, unchanged fetch sequences, redaction and validation before config/token
   access. README/help document selection order, metadata and compatibility.
 
-## Reports and local files — planned
+## Reports and local files
 
-- [ ] **14. Markdown report export.** Produce a standalone human-readable report
-  with source links and visible incomplete status; test Markdown metacharacters,
-  untrusted link text, and empty/partial outputs.
+- [x] **14. Markdown report export.** Completed 2026-10-06: `--format markdown`
+  writes standalone reports with generation time, synthetic/live provenance,
+  prominent completeness, query/display summaries, effective repository policies,
+  page/request status, source links, unverified excerpts and inline safe issues.
+  Central literal-text escaping prevents Markdown/HTML/autolink injection;
+  post-redaction source validation and destination encoding preserve safe GitHub
+  links, with plain-text fallback for changed URLs. Selection, requests, metadata
+  types, existing formats and exit codes remain unchanged; fatal errors produce
+  no Markdown report. All 225 tests, syntax checks and three demos pass, including
+  independently written normal/empty/partial documents, adversarial text/URLs,
+  group/filter/limit composition, failed/skipped/page-budget scans and redaction.
+  Additional local GFM rendering checks passed for eight fixture/adversarial
+  documents without adding dependencies. README/help document redirect and exit
+  handling, escaping and source-link limits. File output remains item 17.
 - [ ] **15. CSV export.** Add a documented column contract, RFC-style escaping,
   formula-safe cells, and tests for quotes, newlines, Unicode, and partial status
   without confusing consumers about metadata placement.

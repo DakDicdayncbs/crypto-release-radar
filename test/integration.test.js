@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { runCli } from '../src/cli.js';
+import { csvObjects } from '../test-support/read-csv.js';
 
 const displayCounts = report => report.repositories.map(r => [
   r.matchingReleases, r.selectedReleases, r.returnedReleases, r.selectionLimited, r.globalSelectionLimited,
@@ -797,7 +798,7 @@ test('total limit preserves complete empty and wholly failed scans in table and 
   }
 });
 
-test('Markdown and JSON preserve paginated group selection, mixed policies, filters and global limits', async t => {
+test('Markdown, CSV and JSON preserve paginated group selection, mixed policies, filters and global limits', async t => {
   const h = await harness(t, (req, res) => {
     if (req.url.includes('/a/')) return respond(res, [
       release(4, 'demo/a'), release(5, 'demo/a', { published_at: '2026-09-04T12:00:00Z', prerelease: true }),
@@ -839,10 +840,30 @@ test('Markdown and JSON preserve paginated group selection, mixed policies, filt
     } else {
       assert.equal((markdown.stdout.match(/Policy: per-repository limit 1; prereleases included/g) ?? []).length, 2);
     }
+    const csv = await h.run([...args, ...extra], 'csv');
+    assert.equal(csv.code, json.code); assert.equal(csv.stderr, json.stderr);
+    assert.deepEqual(h.requests.splice(0), requests);
+    const rows = csvObjects(csv.stdout), summary = rows[0];
+    assert.deepEqual(rows.map(r => r.row_type), ['report', 'repository', 'repository', ...expectedIds.map(() => 'release')]);
+    assert.deepEqual(rows.filter(r => r.row_type === 'release').map(r => Number(r.release_id)), expectedIds);
+    assert.equal(summary.complete, 'true'); assert.equal(summary.mode, 'live');
+    assert.equal(summary.generated_at, json.report.generatedAt);
+    assert.equal(summary.groups, '["preview","stable"]'); assert.equal(summary.tag_patterns, '["v*"]');
+    assert.equal(summary.since, '2026-09-02T12:00:00.000Z'); assert.equal(summary.until, '2026-09-04T12:00:00.000Z');
+    assert.equal(summary.max_pages_per_repository, '3'); assert.equal(summary.total_limit, String(expectedIds.length));
+    assert.deepEqual([summary.matching_releases, summary.selected_releases, summary.returned_releases], [matching, selected, expectedIds.length].map(String));
+    assert.deepEqual([summary.per_repository_hidden_releases, summary.globally_hidden_releases], selected === 3 ? ['0', '1'] : ['2', '1']);
+    assert.deepEqual([summary.limit_per_repository, summary.include_prereleases], selected === 3 ? ['', ''] : ['1', 'true']);
+    const repos = rows.filter(r => r.row_type === 'repository');
+    assert.deepEqual(repos.map(r => [r.repository, r.requested, r.complete, r.pages_fetched, r.max_pages_per_repository]), [['demo/z', 'true', 'true', '2', '3'], ['demo/a', 'true', 'true', '1', '3']]);
+    assert.deepEqual(repos.map(r => [r.limit_per_repository, r.include_prereleases, r.matching_releases, r.selected_releases, r.returned_releases]), selected === 3
+      ? [['2', 'true', '2', '2', '1'], ['1', 'false', '1', '1', '1']]
+      : [['1', 'true', '2', '1', '0'], ['1', 'true', '2', '1', '1']]);
+    assert.deepEqual(rows.filter(r => r.row_type === 'release').map(r => r.url), json.report.releases.map(r => r.url));
   }
 });
 
-test('Markdown retains later-page, malformed, duplicate, failed, rate-limited and skipped issues despite display/filters', async t => {
+test('Markdown and CSV retain later-page, malformed, duplicate, failed, rate-limited and skipped issues despite display/filters', async t => {
   const h = await harness(t, (req, res) => {
     if (req.url.includes('/missing/')) { res.writeHead(404); return res.end('private-remote-error'); }
     if (req.url.includes('/denied/')) { res.writeHead(429, { 'retry-after': '0' }); return res.end('private-remote-error'); }
@@ -874,10 +895,27 @@ test('Markdown retains later-page, malformed, duplicate, failed, rate-limited an
     assert.ok(!(markdown.stdout + markdown.stderr).includes('private-remote-error'));
     if (empty) assert.match(markdown.stdout, /incomplete scan does not establish that the repositories have no releases/);
     else assert.match(markdown.stdout, /hidden by total limit: 1\./);
+    const csv = await h.run(args, 'csv');
+    assert.equal(csv.code, 1); assert.equal(csv.stderr, json.stderr);
+    assert.deepEqual(h.requests.splice(0), requests);
+    const rows = csvObjects(csv.stdout), issues = rows.filter(r => r.row_type === 'issue');
+    assert.deepEqual(rows.map(r => r.row_type), ['report', ...Array(4).fill('repository'), ...(empty ? [] : ['release']), ...Array(6).fill('issue')]);
+    assert.equal(rows[0].complete, 'false'); assert.equal(rows[0].returned_releases, empty ? '0' : '1');
+    assert.equal(rows[0].globally_hidden_releases, empty ? '0' : '1');
+    assert.deepEqual(rows.filter(r => r.row_type === 'release').map(r => r.release_id), empty ? [] : ['2']);
+    assert.deepEqual(rows.filter(r => r.row_type === 'repository').map(r => [r.repository, r.requested, r.pages_fetched]), [
+      ['demo/one', 'true', '1'], ['demo/missing', 'true', '0'], ['demo/denied', 'true', '0'], ['demo/skipped', 'false', '0'],
+    ]);
+    assert.ok(rows.filter(r => r.row_type === 'repository').every(r => r.complete === 'false'));
+    assert.deepEqual(issues.map(r => [r.repository, r.issue_code, r.issue_message]), json.report.issues.map(i => [i.repository, i.code, i.message]));
+    assert.deepEqual(issues.map(r => r.http_status), ['500', '', '', '404', '429', '']);
+    assert.deepEqual(issues.map(r => r.issue_count), ['', '1', '1', '', '', '']);
+    assert.deepEqual(issues.map(r => r.retry_after_seconds), ['', '', '', '', '0', '']);
+    assert.ok(!csv.stdout.includes('private-remote-error'));
   }
 });
 
-test('Markdown preserves page-budget issues for displayed and empty selections', async t => {
+test('Markdown and CSV preserve page-budget issues for displayed and empty selections', async t => {
   const h = await harness(t, (req, res) => respond(res, [release(1), release(2)], {
     link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
   }), { maxPages: 1 });
@@ -892,10 +930,18 @@ test('Markdown preserves page-budget issues for displayed and empty selections',
     assert.match(markdown.stdout, /Pages fetched: 1 \/ 1/);
     assert.match(markdown.stdout, /\*\*Result: INCOMPLETE scan/);
     if (empty) assert.match(markdown.stdout, /incomplete scan does not establish/);
+    const csv = await h.run(args, 'csv');
+    assert.equal(csv.code, 1); assert.equal(csv.stderr, json.stderr);
+    assert.deepEqual(h.requests.splice(0), ['/repos/demo/one/releases?per_page=100&page=1']);
+    const rows = csvObjects(csv.stdout);
+    assert.equal(rows[0].complete, 'false'); assert.equal(rows[0].returned_releases, empty ? '0' : '1');
+    assert.equal(rows[1].pages_fetched, '1'); assert.equal(rows[1].max_pages_per_repository, '1');
+    assert.deepEqual(rows.filter(r => r.row_type === 'release').map(r => r.release_id), empty ? [] : ['2']);
+    assert.deepEqual(rows.filter(r => r.row_type === 'issue').map(r => r.issue_code), ['page_limit']);
   }
 });
 
-test('Markdown and JSON distinguish complete empty queries from wholly failed scans', async t => {
+test('Markdown, CSV and JSON distinguish complete empty queries from wholly failed scans', async t => {
   for (const kind of ['empty-api', 'empty-filter', 'failed']) {
     const h = await harness(t, (req, res) => {
       if (kind === 'failed') { res.writeHead(500); return res.end('private-remote-error'); }
@@ -913,5 +959,15 @@ test('Markdown and JSON distinguish complete empty queries from wholly failed sc
       assert.match(markdown.stdout, /incomplete scan does not establish/);
       assert.ok(markdown.stdout.includes('**http\\_error**'));
     } else assert.match(markdown.stdout, /\*\*Result: COMPLETE scan \| 0 shown releases\*\*/);
+    const csv = await h.run(args, 'csv');
+    assert.equal(csv.code, json.code); assert.equal(csv.stderr, json.stderr);
+    assert.deepEqual(h.requests, Array(3).fill('/repos/demo/one/releases?per_page=100&page=1'));
+    const rows = csvObjects(csv.stdout);
+    assert.deepEqual(rows.map(r => r.row_type), kind === 'failed' ? ['report', 'repository', 'issue'] : ['report', 'repository']);
+    assert.equal(rows[0].complete, kind === 'failed' ? 'false' : 'true');
+    assert.equal(rows[0].matching_releases, '0'); assert.equal(rows[0].returned_releases, '0');
+    assert.equal(rows[0].total_limit, ''); assert.equal(rows[0].global_selection_limited, 'false');
+    assert.equal(rows[1].requested, 'true'); assert.equal(rows[1].pages_fetched, kind === 'failed' ? '0' : '1');
+    if (kind === 'failed') assert.equal(rows[2].issue_code, 'http_error');
   }
 });

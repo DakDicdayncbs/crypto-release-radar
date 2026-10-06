@@ -16,7 +16,7 @@ Usage: node bin/crypto-release-radar.js --config examples/repos.json [options]
 
 Options:
   --config PATH             JSON config (default: radar.config.json)
-  --format FORMAT          table (default), json, or markdown
+  --format FORMAT           table (default), json, markdown, or csv
   --include-prereleases     Include prereleases in every repository (no drafts)
   --limit NUMBER            Override every repository's display limit (1–50)
   --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
@@ -34,6 +34,14 @@ links, query/policy/display details, scan status and issues. Redirect stdout to
 save it; check exit status (0 complete, 1 incomplete, 2 fatal). Fatal errors leave
 Markdown stdout empty. Untrusted text is escaped; redacted URLs stay plain text.
 Demo provenance and automatic, unverified excerpt notices remain visible.
+
+--format csv writes UTF-8, comma-delimited, fully quoted fields and CRLF records.
+Fixed 40-column header; one report row, all repository rows, release rows, issues.
+Text starting with a formula marker (including full-width forms after whitespace/
+control/format characters), or leading TAB/CR/LF, gets an apostrophe prefix.
+Import columns as Text for exact IDs; spreadsheet re-saving may undo protection.
+Exit 0/1 includes complete/incomplete CSV; fatal errors (2) leave stdout empty.
+Full column, null, policy and escaping contract: docs/CSV.md. No --output option.
 
 Config repositories accept slug strings or objects with slug, limit and
 includePrereleases. Precedence per field: CLI > repository object > top-level
@@ -141,7 +149,7 @@ export function parseArgs(args) {
   if (options.validateConfig && [...seen].some(arg => !['--validate-config', '--config', '--help', '--version'].includes(arg))) {
     throw new RadarError('usage', '--validate-config accepts only --config, --help and --version.');
   }
-  if (!['table', 'json', 'markdown'].includes(options.format)) throw new RadarError('usage', '--format must be table, json or markdown.');
+  if (!['table', 'json', 'markdown', 'csv'].includes(options.format)) throw new RadarError('usage', '--format must be table, json, markdown or csv.');
   if (options.demo && seen.has('--config')) throw new RadarError('usage', '--demo uses bundled repositories and cannot be combined with --config.');
   validateGroupSelection(options.groups);
   if (options.demo && options.groups?.length) throw new RadarError('usage', '--group cannot be combined with --demo.');
@@ -181,7 +189,7 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
       groups: options.groups, totalLimit: options.totalLimit,
       policyOverrides: { limit: options.limit, includePrereleases: options.includePrereleases },
     });
-    // Redact strings before serialization/Markdown escaping; preserve typed metadata.
+    // Redact strings before serialization or format-specific escaping; preserve typed metadata.
     stdout.write(formatReport(redactValues(report, token), format));
     stderr.write(redact(formatIssues(report.issues), token));
     return report.complete ? 0 : 1;

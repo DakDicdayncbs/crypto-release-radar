@@ -3,8 +3,8 @@
 A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
 Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entries
-10–11 on 2026-10-04, entries 12–13 on 2026-10-05, and entry 14 on 2026-10-06;
-entries 15–45 remain planned.
+10–11 on 2026-10-04, entries 12–13 on 2026-10-05, and entries 14–15 on 2026-10-06;
+entries 16–45 remain planned.
 The count is a planning aid, not a commit target. Combine or revise future scope
 when evidence makes that useful.
 
@@ -124,9 +124,20 @@ from the initial baseline publication.
   Additional local GFM rendering checks passed for eight fixture/adversarial
   documents without adding dependencies. README/help document redirect and exit
   handling, escaping and source-link limits. File output remains item 17.
-- [ ] **15. CSV export.** Add a documented column contract, RFC-style escaping,
-  formula-safe cells, and tests for quotes, newlines, Unicode, and partial status
-  without confusing consumers about metadata placement.
+- [x] **15. CSV export.** Completed 2026-10-06: `--format csv` writes a fixed
+  40-column UTF-8 contract with header, one report row, every selected repository,
+  globally ordered releases and all safe issues. Quoted fields/doubled quotes and
+  CRLF records preserve embedded line breaks; centralized apostrophe protection
+  covers formula starts/full-width variants after Unicode whitespace/control/
+  format characters and leading TAB/CR/LF. Explicit projections keep unknown fields out and
+  preserve source types, selection, requests, redaction and exit 0/1/2 semantics.
+  Document exact columns/order, null/zero/false, arrays, budgets/policies, hidden
+  counts, synthetic provenance, Text import and re-save limitations in docs/CSV.md.
+  All 237 tests, syntax checks and four demos pass, including independent byte
+  fixtures/readers, every text context, exact large IDs, empty/failed/skipped and
+  late-error scans, group/filter/both-limit composition and format compatibility.
+  Python's CSV reader independently verified three fixtures and a generated
+  adversarial report. No dependencies, output-file option or workflow changes.
 - [ ] **16. NDJSON export.** Define record types for metadata, releases, and issues;
   preserve final completeness and test recovery from a truncated output stream.
 - [ ] **17. Atomic output file.** Add `--output` with a temporary sibling file and

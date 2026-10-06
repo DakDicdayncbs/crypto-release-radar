@@ -1,7 +1,8 @@
 # Crypto Release Radar
 
 A small Node.js 22+ CLI that reads an explicit repository list and turns published
-GitHub releases into a table, JSON or Markdown report. No runtime or development dependencies.
+GitHub releases into a table, JSON, Markdown or CSV report. No runtime or
+development dependencies.
 
 It shows the repository, release name, tag, publication time in UTC, prerelease
 flag, source link, and a short automatic excerpt of the release notes. It never
@@ -23,6 +24,7 @@ npm test
 npm run demo
 node bin/crypto-release-radar.js --demo --format json --include-prereleases
 node bin/crypto-release-radar.js --demo --format markdown
+node bin/crypto-release-radar.js --demo --format csv
 ```
 
 The demo never uses the network or reads a token. All entries under `radar-demo/*`
@@ -74,7 +76,7 @@ The same reader enforces these limits for scans and `--validate-config`; see
 
 ```text
 --config PATH             Config file
---format FORMAT           table (default), json, or markdown
+--format FORMAT           table (default), json, markdown, or csv
 --include-prereleases     Include prereleases in every repository
 --limit NUMBER            Override every repository's display limit
 --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
@@ -677,10 +679,11 @@ when `--total-limit` is set. Individual releases contain `repository`, `id`,
 stable codes and optional `status`, `count`, `retryAfterSeconds`, or `resetAt`.
 
 Output goes to stdout. Diagnostics always go to stderr; JSON also embeds them in
-`issues` and Markdown includes an Issues section. Use the direct `node` command
-when piping JSON or Markdown, because `npm run` adds its own script banner.
+`issues`, Markdown includes an Issues section, and CSV includes issue rows.
+Use the direct `node` command when piping JSON, Markdown or CSV, because `npm run`
+adds its own script banner.
 Fatal config/local errors produce a smaller JSON error envelope when valid
-arguments selected JSON; fatal errors in Markdown and argument parsing failures
+arguments selected JSON; fatal errors in Markdown/CSV and argument parsing failures
 leave stdout empty and report safe diagnostics on stderr.
 
 | Exit | Meaning |
@@ -768,6 +771,35 @@ with `--validate-config`. Config fields and report schema versions are unchanged
 The [normal](test-support/markdown-normal.md), [empty](test-support/markdown-empty.md)
 and [partial](test-support/markdown-partial.md) documents are fixed test expectations,
 not observations from a real repository.
+
+## CSV reports
+
+`--format csv` writes a standalone UTF-8 CSV document with a fixed 40-column
+header, followed by one report row, all selected repository rows, globally sorted
+release rows and every safe issue row. Metadata has an explicit place even when
+no releases match or every request fails. The report includes query/group and
+policy metadata, page budgets, completeness, both display limits, hidden counts,
+synthetic/live provenance and the automatic-unverified digest notice.
+
+```sh
+node bin/crypto-release-radar.js --demo --format csv
+node bin/crypto-release-radar.js --config examples/repos.json --format csv --total-limit 5 > release-report.csv
+```
+
+Fields are always quoted, quotes are doubled, commas separate fields, and every
+record ends in CRLF. Embedded line breaks are preserved by CSV encoding; existing
+upstream text normalization still applies. Text with a dangerous formula start
+receives an apostrophe prefix, including full-width markers after leading Unicode
+whitespace/control/format characters and leading TAB/CR/LF. This changes exported
+text and does not guarantee safety after arbitrary spreadsheet re-saving.
+Import columns as **Text** to retain exact large IDs, dates and leading zeros.
+
+Exit 0 means complete, exit 1 still produces full CSV marked incomplete, and
+fatal exit 2 leaves stdout empty with safe stderr. Redirection belongs to the
+shell; no `--output` option is added. CSV changes neither collection nor the
+existing table/JSON/Markdown formats. See the [CSV version 1 contract](docs/CSV.md)
+for exact column/row order, field applicability, null versus zero/false, safe
+import, formula-prefix rules and standalone normal/empty/partial examples.
 
 ## Errors and digest limits
 

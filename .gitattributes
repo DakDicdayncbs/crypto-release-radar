@@ -1,0 +1,2 @@
+# Byte-for-byte CSV expectations retain CRLF on every checkout.
+test-support/csv-*.csv -text whitespace=cr-at-eol

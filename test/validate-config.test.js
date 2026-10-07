@@ -77,7 +77,7 @@ test('unreadable and malformed input fail safely without reflecting file paths o
 test('validation rejects every scan option in either order and preserves safe usage errors', async () => {
   const conflicts = [
     ['--demo'], ['--group', 'stable'], ['--format', 'table'], ['--format', 'json'], ['--format', 'markdown'],
-    ['--format', 'csv'],
+    ['--format', 'csv'], ['--format', 'ndjson'],
     ['--limit', '5'], ['--include-prereleases'], ['--tag-pattern', 'v*'], ['--tag-pattern=v*'],
     ['--total-limit', '1'],
     ['--since', '2026-10-04T00:00:00Z'], ['--until', '2026-10-04T23:59:59Z'],

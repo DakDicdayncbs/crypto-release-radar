@@ -4,7 +4,7 @@ A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
 Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entries
 10–11 on 2026-10-04, entries 12–13 on 2026-10-05, and entries 14–15 on 2026-10-06;
-entries 16–45 remain planned.
+entry 16 was completed on 2026-10-07; entries 17–45 remain planned.
 The count is a planning aid, not a commit target. Combine or revise future scope
 when evidence makes that useful.
 
@@ -138,8 +138,21 @@ from the initial baseline publication.
   late-error scans, group/filter/both-limit composition and format compatibility.
   Python's CSV reader independently verified three fixtures and a generated
   adversarial report. No dependencies, output-file option or workflow changes.
-- [ ] **16. NDJSON export.** Define record types for metadata, releases, and issues;
-  preserve final completeness and test recovery from a truncated output stream.
+- [x] **16. NDJSON export.** Completed 2026-10-07: `--format ndjson` serializes the
+  fully collected, normalized/redacted report as compact UTF-8 JSON objects with
+  LF framing: metadata, every repository, globally ordered releases, all safe
+  issues and a mandatory versioned summary with record counts. Document completion
+  is separate from scan completeness; exit 1 still has a final summary, while
+  fatal exit 2 has safe stderr and empty stdout. Preserve types, optional fields,
+  both limits, request traces and existing formats. An independent byte reader
+  retains only checked LF-terminated records, rejects malformed encodings/JSON,
+  ordering/count errors and trailing data, and never accepts a missing summary/LF.
+  All 250 tests, syntax checks and five demos pass. Independent Python fixtures
+  and consumer verify exact values and every byte prefix of a Unicode document;
+  the documented JS consumer and 12 byte comparisons against the published old
+  formats also pass. Document versions, all fields, accounting and recovery's
+  freshness/authenticity limits in docs/NDJSON.md. No live page streaming, input
+  CLI, output-file option, dependencies or workflow changes.
 - [ ] **17. Atomic output file.** Add `--output` with a temporary sibling file and
   atomic replacement, explicit overwrite behavior, and filesystem failure tests;
   prevent accidental writes over the config or inputs.

@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { runCli } from '../src/cli.js';
 import { csvObjects } from '../test-support/read-csv.js';
+import { readNdjson, readNdjsonReport } from '../test-support/read-ndjson.js';
 
 const displayCounts = report => report.repositories.map(r => [
   r.matchingReleases, r.selectedReleases, r.returnedReleases, r.selectionLimited, r.globalSelectionLimited,
@@ -798,7 +799,7 @@ test('total limit preserves complete empty and wholly failed scans in table and 
   }
 });
 
-test('Markdown, CSV and JSON preserve paginated group selection, mixed policies, filters and global limits', async t => {
+test('Markdown, CSV, NDJSON and JSON preserve paginated group selection, mixed policies, filters and global limits', async t => {
   const h = await harness(t, (req, res) => {
     if (req.url.includes('/a/')) return respond(res, [
       release(4, 'demo/a'), release(5, 'demo/a', { published_at: '2026-09-04T12:00:00Z', prerelease: true }),
@@ -860,10 +861,14 @@ test('Markdown, CSV and JSON preserve paginated group selection, mixed policies,
       ? [['2', 'true', '2', '2', '1'], ['1', 'false', '1', '1', '1']]
       : [['1', 'true', '2', '1', '0'], ['1', 'true', '2', '1', '1']]);
     assert.deepEqual(rows.filter(r => r.row_type === 'release').map(r => r.url), json.report.releases.map(r => r.url));
+    const ndjson = await h.run([...args, ...extra], 'ndjson');
+    assert.equal(ndjson.code, json.code); assert.equal(ndjson.stderr, json.stderr);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.deepEqual(readNdjsonReport(Buffer.from(ndjson.stdout)), json.report);
   }
 });
 
-test('Markdown and CSV retain later-page, malformed, duplicate, failed, rate-limited and skipped issues despite display/filters', async t => {
+test('Markdown, CSV and NDJSON retain later-page, malformed, duplicate, failed, rate-limited and skipped issues despite display/filters', async t => {
   const h = await harness(t, (req, res) => {
     if (req.url.includes('/missing/')) { res.writeHead(404); return res.end('private-remote-error'); }
     if (req.url.includes('/denied/')) { res.writeHead(429, { 'retry-after': '0' }); return res.end('private-remote-error'); }
@@ -912,10 +917,18 @@ test('Markdown and CSV retain later-page, malformed, duplicate, failed, rate-lim
     assert.deepEqual(issues.map(r => r.issue_count), ['', '1', '1', '', '', '']);
     assert.deepEqual(issues.map(r => r.retry_after_seconds), ['', '', '', '', '0', '']);
     assert.ok(!csv.stdout.includes('private-remote-error'));
+    const ndjson = await h.run(args, 'ndjson');
+    assert.equal(ndjson.code, 1); assert.equal(ndjson.stderr, json.stderr);
+    assert.deepEqual(h.requests.splice(0), requests);
+    assert.deepEqual(readNdjsonReport(Buffer.from(ndjson.stdout)), json.report);
+    const recovered = readNdjson(Buffer.from(ndjson.stdout));
+    assert.equal(recovered.status, 'complete'); assert.equal(recovered.scanComplete, false);
+    assert.equal(recovered.records.at(-1).counts.issues, 6);
+    assert.ok(!ndjson.stdout.includes('private-remote-error'));
   }
 });
 
-test('Markdown and CSV preserve page-budget issues for displayed and empty selections', async t => {
+test('Markdown, CSV and NDJSON preserve page-budget issues for displayed and empty selections', async t => {
   const h = await harness(t, (req, res) => respond(res, [release(1), release(2)], {
     link: '<https://api.github.com/repos/demo/one/releases?per_page=100&page=2>; rel="next"',
   }), { maxPages: 1 });
@@ -938,10 +951,14 @@ test('Markdown and CSV preserve page-budget issues for displayed and empty selec
     assert.equal(rows[1].pages_fetched, '1'); assert.equal(rows[1].max_pages_per_repository, '1');
     assert.deepEqual(rows.filter(r => r.row_type === 'release').map(r => r.release_id), empty ? [] : ['2']);
     assert.deepEqual(rows.filter(r => r.row_type === 'issue').map(r => r.issue_code), ['page_limit']);
+    const ndjson = await h.run(args, 'ndjson');
+    assert.equal(ndjson.code, 1); assert.equal(ndjson.stderr, json.stderr);
+    assert.deepEqual(h.requests.splice(0), ['/repos/demo/one/releases?per_page=100&page=1']);
+    assert.deepEqual(readNdjsonReport(Buffer.from(ndjson.stdout)), json.report);
   }
 });
 
-test('Markdown, CSV and JSON distinguish complete empty queries from wholly failed scans', async t => {
+test('Markdown, CSV, NDJSON and JSON distinguish complete empty queries from wholly failed scans', async t => {
   for (const kind of ['empty-api', 'empty-filter', 'failed']) {
     const h = await harness(t, (req, res) => {
       if (kind === 'failed') { res.writeHead(500); return res.end('private-remote-error'); }
@@ -969,5 +986,10 @@ test('Markdown, CSV and JSON distinguish complete empty queries from wholly fail
     assert.equal(rows[0].total_limit, ''); assert.equal(rows[0].global_selection_limited, 'false');
     assert.equal(rows[1].requested, 'true'); assert.equal(rows[1].pages_fetched, kind === 'failed' ? '0' : '1');
     if (kind === 'failed') assert.equal(rows[2].issue_code, 'http_error');
+    const ndjson = await h.run(args, 'ndjson');
+    assert.equal(ndjson.code, json.code); assert.equal(ndjson.stderr, json.stderr);
+    assert.deepEqual(h.requests, Array(4).fill('/repos/demo/one/releases?per_page=100&page=1'));
+    assert.deepEqual(readNdjsonReport(Buffer.from(ndjson.stdout)), json.report);
+    assert.equal(readNdjson(Buffer.from(ndjson.stdout)).scanComplete, kind !== 'failed');
   }
 });

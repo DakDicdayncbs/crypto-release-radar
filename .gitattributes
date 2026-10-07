@@ -1,2 +1,4 @@
 # Byte-for-byte CSV expectations retain CRLF on every checkout.
 test-support/csv-*.csv -text whitespace=cr-at-eol
+# NDJSON framing requires LF, including in independent byte fixtures.
+test-support/ndjson-*.ndjson text eol=lf

@@ -1,7 +1,7 @@
 # Crypto Release Radar
 
 A small Node.js 22+ CLI that reads an explicit repository list and turns published
-GitHub releases into a table, JSON, Markdown or CSV report. No runtime or
+GitHub releases into a table, JSON, Markdown, CSV or NDJSON report. No runtime or
 development dependencies.
 
 It shows the repository, release name, tag, publication time in UTC, prerelease
@@ -25,6 +25,7 @@ npm run demo
 node bin/crypto-release-radar.js --demo --format json --include-prereleases
 node bin/crypto-release-radar.js --demo --format markdown
 node bin/crypto-release-radar.js --demo --format csv
+node bin/crypto-release-radar.js --demo --format ndjson
 ```
 
 The demo never uses the network or reads a token. All entries under `radar-demo/*`
@@ -76,7 +77,7 @@ The same reader enforces these limits for scans and `--validate-config`; see
 
 ```text
 --config PATH             Config file
---format FORMAT           table (default), json, markdown, or csv
+--format FORMAT           table (default), json, markdown, csv, or ndjson
 --include-prereleases     Include prereleases in every repository
 --limit NUMBER            Override every repository's display limit
 --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
@@ -679,11 +680,11 @@ when `--total-limit` is set. Individual releases contain `repository`, `id`,
 stable codes and optional `status`, `count`, `retryAfterSeconds`, or `resetAt`.
 
 Output goes to stdout. Diagnostics always go to stderr; JSON also embeds them in
-`issues`, Markdown includes an Issues section, and CSV includes issue rows.
-Use the direct `node` command when piping JSON, Markdown or CSV, because `npm run`
+`issues`, Markdown includes an Issues section, and CSV/NDJSON include issue records.
+Use the direct `node` command when piping report formats, because `npm run`
 adds its own script banner.
 Fatal config/local errors produce a smaller JSON error envelope when valid
-arguments selected JSON; fatal errors in Markdown/CSV and argument parsing failures
+arguments selected JSON; fatal errors in Markdown/CSV/NDJSON and argument parsing failures
 leave stdout empty and report safe diagnostics on stderr.
 
 | Exit | Meaning |
@@ -800,6 +801,38 @@ shell; no `--output` option is added. CSV changes neither collection nor the
 existing table/JSON/Markdown formats. See the [CSV version 1 contract](docs/CSV.md)
 for exact column/row order, field applicability, null versus zero/false, safe
 import, formula-prefix rules and standalone normal/empty/partial examples.
+
+## NDJSON reports
+
+`--format ndjson` writes UTF-8 without BOM, one compact JSON object per
+LF-terminated line. Record order is one `metadata`, every selected `repository`,
+globally ordered `release` records, all safe `issue` records, and one final
+`summary`. Empty, failed and skipped repositories stay visible. Numbers,
+booleans, nulls, optional fields, query/group/policy metadata and both display
+limits retain their JSON meaning. Collection, normalization, redaction, sorting
+and limits finish before export; this is not live streaming of API pages.
+
+```sh
+node bin/crypto-release-radar.js --demo --format ndjson
+node bin/crypto-release-radar.js --config examples/repos.json --format ndjson --total-limit 5 > release-report.ndjson
+```
+
+Check both the process exit status and the document: **0** means a complete scan,
+**1** an incomplete scan with all issues and a final summary, **2** a fatal error
+with safe stderr and empty stdout. Shell redirection may still create an empty
+file. No output-file option, input command or extra requests are added.
+
+Only a validated final summary, its terminating LF, consistent counts and end of
+input confirm document completion. `summary.documentComplete: true` is separate
+from `summary.scanComplete`: a fully delivered incomplete scan remains incomplete.
+Metadata, parseable earlier lines, or a valid final JSON object **without LF**
+are insufficient. Recovery retains only checked whole records before a broken or
+unfinished line; the suffix is never treated as a release or completion signal.
+Recovery neither repeats the scan nor proves freshness or the absence of releases.
+
+See the [NDJSON version 1 contract and consumer example](docs/NDJSON.md) for all
+record fields, ordering, counters, byte-level recovery, and limits of validation.
+The format is not a signature and cannot detect every external modification.
 
 ## Errors and digest limits
 

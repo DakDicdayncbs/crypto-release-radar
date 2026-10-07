@@ -16,7 +16,7 @@ Usage: node bin/crypto-release-radar.js --config examples/repos.json [options]
 
 Options:
   --config PATH             JSON config (default: radar.config.json)
-  --format FORMAT           table (default), json, markdown, or csv
+  --format FORMAT           table (default), json, markdown, csv, or ndjson
   --include-prereleases     Include prereleases in every repository (no drafts)
   --limit NUMBER            Override every repository's display limit (1–50)
   --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
@@ -42,6 +42,14 @@ control/format characters), or leading TAB/CR/LF, gets an apostrophe prefix.
 Import columns as Text for exact IDs; spreadsheet re-saving may undo protection.
 Exit 0/1 includes complete/incomplete CSV; fatal errors (2) leave stdout empty.
 Full column, null, policy and escaping contract: docs/CSV.md. No --output option.
+
+--format ndjson writes one compact JSON object per LF-terminated UTF-8 line.
+Order: metadata, all repositories, releases, issues, mandatory final summary.
+Only a validated summary and end of input confirm document completion. Its
+scanComplete flag is separate: exit 1 still ends with a summary, scanComplete false.
+Missing summary or final LF means truncated output, even if earlier JSON parses.
+Collection/sorting/limits finish before export; no live page streaming or files.
+Fatal errors (2) leave stdout empty. Versioned contract/reader: docs/NDJSON.md.
 
 Config repositories accept slug strings or objects with slug, limit and
 includePrereleases. Precedence per field: CLI > repository object > top-level
@@ -149,7 +157,7 @@ export function parseArgs(args) {
   if (options.validateConfig && [...seen].some(arg => !['--validate-config', '--config', '--help', '--version'].includes(arg))) {
     throw new RadarError('usage', '--validate-config accepts only --config, --help and --version.');
   }
-  if (!['table', 'json', 'markdown', 'csv'].includes(options.format)) throw new RadarError('usage', '--format must be table, json, markdown or csv.');
+  if (!['table', 'json', 'markdown', 'csv', 'ndjson'].includes(options.format)) throw new RadarError('usage', '--format must be table, json, markdown, csv or ndjson.');
   if (options.demo && seen.has('--config')) throw new RadarError('usage', '--demo uses bundled repositories and cannot be combined with --config.');
   validateGroupSelection(options.groups);
   if (options.demo && options.groups?.length) throw new RadarError('usage', '--group cannot be combined with --demo.');

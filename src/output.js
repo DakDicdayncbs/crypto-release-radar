@@ -1,5 +1,6 @@
 import { formatMarkdown } from './markdown.js';
 import { formatCsv } from './csv.js';
+import { formatNdjson } from './ndjson.js';
 
 const cell = (value) => String(value).replace(/\|/g, '¦');
 
@@ -7,6 +8,7 @@ export function formatReport(report, format) {
   if (format === 'json') return JSON.stringify(report, null, 2) + '\n';
   if (format === 'markdown') return formatMarkdown(report);
   if (format === 'csv') return formatCsv(report);
+  if (format === 'ndjson') return formatNdjson(report);
   const bounds = [
     report.scope.since && `published_at >= ${report.scope.since}`,
     report.scope.until && `published_at <= ${report.scope.until}`,

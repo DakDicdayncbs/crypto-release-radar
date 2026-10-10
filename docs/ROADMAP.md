@@ -4,7 +4,8 @@ A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
 Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entries
 10–11 on 2026-10-04, entries 12–13 on 2026-10-05, and entries 14–15 on 2026-10-06;
-entry 16 was completed on 2026-10-07; entries 17–45 remain planned.
+entry 16 was completed on 2026-10-07 and entry 17 on 2026-10-10;
+entries 18–45 remain planned.
 The count is a planning aid, not a commit target. Combine or revise future scope
 when evidence makes that useful.
 
@@ -153,9 +154,24 @@ from the initial baseline publication.
   formats also pass. Document versions, all fields, accounting and recovery's
   freshness/authenticity limits in docs/NDJSON.md. No live page streaming, input
   CLI, output-file option, dependencies or workflow changes.
-- [ ] **17. Atomic output file.** Add `--output` with a temporary sibling file and
-  atomic replacement, explicit overwrite behavior, and filesystem failure tests;
-  prevent accidental writes over the config or inputs.
+- [x] **17. Atomic output file.** Completed 2026-10-10: CLI-only `--output FILE`
+  saves identical bytes in all five formats with empty stdout; explicit
+  `--overwrite` permits replacing an ordinary report file. Read-only preflight
+  precedes token/API access. Protect actual opened config/default/demo identities,
+  canonical paths, parent symlinks and hardlink aliases, including input inode
+  replacement; retain OS symlink/.. traversal and recheck paths before publication.
+  Exclusive private 0600 sibling temps use checked full/short writes, fsync and
+  successful close, then atomic no-clobber link or replacement rename. Failures
+  preserve prior output; ownership-checked cleanup distinguishes published reports
+  from unpublished failures without rollback. Keep normal scan 0/1, safe error 2,
+  stdout JSON fatal-envelope compatibility without output, formats and requests.
+  All 289 tests, syntax checks and five demos pass, including filesystem faults,
+  aliases/races/concurrent writers, all report states, filters/groups/both limits,
+  redaction and unchanged byte contracts. Independent Python smoke verified new
+  saves, collision refusal, replacement, mode 0600 and CSV/NDJSON consumption.
+  Document exact path/error/concurrency/cleanup policy and local-filesystem,
+  hostile-directory and crash-durability limits in docs/OUTPUT.md. No dependencies,
+  network/workflow changes, directory creation or signal lifecycle additions.
 - [ ] **18. JSON contract documentation.** Publish a versioned report schema and
   compatibility examples; add consumer tests for optional fields, error envelopes,
   and future-compatible unknown properties.

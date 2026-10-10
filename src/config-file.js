@@ -9,7 +9,7 @@ const readFailure = () => new RadarError('config_read', 'Cannot read config file
 const sizeFailure = () => new RadarError('config_size', 'Config exceeds the 131072-byte limit.');
 const syntaxFailure = () => new RadarError('config_syntax', 'Config is not valid JSON.');
 
-async function readBoundedBytes(path, io) {
+async function readBoundedBytes(path, io, onOpened) {
   let handle;
   try {
     // Fail closed if the platform cannot protect open against symlink/FIFO races.
@@ -18,9 +18,10 @@ async function readBoundedBytes(path, io) {
     if (!before.isFile()) throw readFailure();
     if (before.size > MAX_CONFIG_BYTES) throw sizeFailure();
     handle = await io.open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK | (constants.O_NOCTTY ?? 0));
-    const opened = await handle.stat();
+    const opened = await handle.stat(onOpened ? { bigint: true } : undefined);
     if (!opened.isFile()) throw readFailure();
     if (opened.size > MAX_CONFIG_BYTES) throw sizeFailure();
+    onOpened?.({ dev: opened.dev, ino: opened.ino });
     // The extra byte detects overflow even if stat was stale or the file grows.
     const buffer = Buffer.alloc(MAX_CONFIG_BYTES + 1);
     let length = 0;
@@ -67,8 +68,8 @@ function checkNesting(text) {
 }
 
 // The injected file operations are an internal test seam, never a CLI option.
-export async function readConfigValue(path, io = { lstat, open }) {
-  const bytes = await readBoundedBytes(path, io);
+export async function readConfigValue(path, io = { lstat, open }, onOpened) {
+  const bytes = await readBoundedBytes(path, io, onOpened);
   let text;
   try {
     // Do not silently strip a leading UTF-8 BOM or replace malformed sequences.

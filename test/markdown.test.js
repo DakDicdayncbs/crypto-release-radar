@@ -92,7 +92,7 @@ test('Markdown CLI validates format, duplicates and validation conflicts before 
     ['--format', 'md'], ['--format', 'Markdown'], ['--format', 'markdown '], ['--format=markdown'], ['--format'],
     ['--format', 'markdown', '--format', 'json'], ['--format', 'markdown', '--format', 'markdown'],
     ['--format', 'markdown', '--validate-config'], ['--validate-config', '--format', 'markdown'],
-    ['--format', 'markdown', '--output', 'private-sentinel'],
+    ['--format', 'markdown', '--output=private-sentinel'],
   ]) {
     const result = await run(['--config', 'private-sentinel/missing', ...args], blocked);
     assert.equal(result.code, 2); assert.equal(result.stdout, '');

@@ -117,7 +117,7 @@ test('CSV format parsing rejects aliases, missing/repeated values and validation
   for (const args of [
     ['--format', 'CSV'], ['--format', 'tsv'], ['--format', 'csv '], ['--format=csv'], ['--format'], ['--format', '--demo'],
     ['--format', 'csv', '--format', 'csv'], ['--format', 'csv', '--format', 'json'],
-    ['--format', 'csv', '--validate-config'], ['--validate-config', '--format', 'csv'], ['--format', 'csv', '--output', 'private-sentinel'],
+    ['--format', 'csv', '--validate-config'], ['--validate-config', '--format', 'csv'], ['--format', 'csv', '--output=private-sentinel'],
   ]) {
     const result = await run(['--config', 'private-sentinel/missing', ...args], blocked);
     assert.equal(result.code, 2); assert.equal(result.stdout, '');

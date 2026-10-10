@@ -1,17 +1,19 @@
 # CSV report contract — version 1
 
-Use `--format csv` to write one standalone report to stdout. This is an explicit
+Use `--format csv` to write one standalone report to stdout, or add `--output FILE`
+to save the same bytes atomically with stdout empty. This is an explicit
 projection of the same normalized, token-redacted report used by JSON. It does
 not change filtering, global ordering, requests, policies, completeness, stderr
 or exit status, and does not expose raw API responses, bodies, headers or errors.
-There are no runtime dependencies or file-writing options.
+There are no runtime dependencies. See the [file output policy](OUTPUT.md) for
+no-overwrite defaults, explicit `--overwrite`, input protection and failure handling.
 
 ```sh
 node bin/crypto-release-radar.js --demo --format csv
 node bin/crypto-release-radar.js --config examples/groups.json --group clients --format csv --total-limit 5 > release-report.csv
 ```
 
-Use a new filename: redirection is performed by the shell and can overwrite an
+Prefer `--output release-report.csv` for atomic saving. Shell redirection can overwrite an
 existing file. Keep stderr separate. Under `set -e`, capture status explicitly:
 
 ```sh
@@ -33,8 +35,10 @@ version retain their usual informational text output.
 
 `csv` is case-sensitive. `CSV`, `tsv`, `--format=csv`, missing values and repeated
 format options are usage errors, before config/token/network access. Like other
-formats, CSV conflicts with `--validate-config`. It does not add a config field,
-`--output`, NDJSON, a new JSON schema version or spreadsheet automation.
+formats, CSV conflicts with `--validate-config`. It adds no config field, new JSON
+schema version or spreadsheet automation. `--output` and `--overwrite` are CLI-only;
+file write failures return 2, including a distinctly reported cleanup failure
+after successful publication. A previous output is never truncated in place.
 
 ## Encoding and record layout
 

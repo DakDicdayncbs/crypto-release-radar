@@ -1,5 +1,8 @@
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { readConfig, validateConfig, validateGroupSelection, selectRepositoryGroups, MAX_GROUPS } from './config.js';
+import { readConfigValue } from './config-file.js';
+import { prepareOutput, resolveFilePath, validateOutputPath, writeOutput } from './output-file.js';
 import { RadarError, safeError } from './errors.js';
 import { formatIssues, formatReport } from './output.js';
 import { collectReport } from './radar.js';
@@ -17,6 +20,8 @@ Usage: node bin/crypto-release-radar.js --config examples/repos.json [options]
 Options:
   --config PATH             JSON config (default: radar.config.json)
   --format FORMAT           table (default), json, markdown, csv, or ndjson
+  --output FILE             Atomically save report to a new file; stdout stays empty
+  --overwrite               Allow replacement of an ordinary file; requires --output
   --include-prereleases     Include prereleases in every repository (no drafts)
   --limit NUMBER            Override every repository's display limit (1–50)
   --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
@@ -41,15 +46,24 @@ Text starting with a formula marker (including full-width forms after whitespace
 control/format characters), or leading TAB/CR/LF, gets an apostrophe prefix.
 Import columns as Text for exact IDs; spreadsheet re-saving may undo protection.
 Exit 0/1 includes complete/incomplete CSV; fatal errors (2) leave stdout empty.
-Full column, null, policy and escaping contract: docs/CSV.md. No --output option.
+Full column, null, policy and escaping contract: docs/CSV.md.
 
 --format ndjson writes one compact JSON object per LF-terminated UTF-8 line.
 Order: metadata, all repositories, releases, issues, mandatory final summary.
 Only a validated summary and end of input confirm document completion. Its
 scanComplete flag is separate: exit 1 still ends with a summary, scanComplete false.
 Missing summary or final LF means truncated output, even if earlier JSON parses.
-Collection/sorting/limits finish before export; no live page streaming or files.
+Collection/sorting/limits finish before export; no live page streaming.
 Fatal errors (2) leave stdout empty. Versioned contract/reader: docs/NDJSON.md.
+
+--output saves identical report bytes in all five formats, including incomplete
+reports (exit 1); stdout is empty. Fatal errors (2) never save a JSON error envelope.
+Requires an existing parent; no directories are created. Existing destinations
+need --overwrite; symlinks, special files and input aliases are always refused.
+A private 0600 sibling is fully written, synced and closed before atomic link
+(new file) or rename (replacement). Detected path changes fail closed. A cleanup
+failure after publication reports that the saved report remains; no rollback.
+No crash-durability or hostile-directory race guarantee. See docs/OUTPUT.md.
 
 Config repositories accept slug strings or objects with slug, limit and
 includePrereleases. Precedence per field: CLI > repository object > top-level
@@ -116,6 +130,7 @@ export function parseArgs(args) {
       case '--demo': options.demo = true; break;
       case '--validate-config': options.validateConfig = true; break;
       case '--include-prereleases': options.includePrereleases = true; break;
+      case '--overwrite': options.overwrite = true; break;
       case '--group': {
         const value = args[++i];
         if (value === undefined || value.startsWith('--')) throw new RadarError('usage', 'An option value is missing. See --help.');
@@ -133,6 +148,7 @@ export function parseArgs(args) {
         break;
       }
       case '--config':
+      case '--output':
       case '--format':
       case '--since':
       case '--until':
@@ -141,6 +157,7 @@ export function parseArgs(args) {
         const value = args[++i];
         if (!value || value.startsWith('--')) throw new RadarError('usage', 'An option value is missing. See --help.');
         if (arg === '--config') options.configPath = value;
+        if (arg === '--output') { validateOutputPath(value); options.outputPath = value; }
         if (arg === '--format') options.format = value;
         if (arg === '--since') options.since = parseSince(value);
         if (arg === '--until') options.until = parseUntil(value);
@@ -157,6 +174,7 @@ export function parseArgs(args) {
   if (options.validateConfig && [...seen].some(arg => !['--validate-config', '--config', '--help', '--version'].includes(arg))) {
     throw new RadarError('usage', '--validate-config accepts only --config, --help and --version.');
   }
+  if (options.overwrite && !options.outputPath) throw new RadarError('usage', '--overwrite requires --output.');
   if (!['table', 'json', 'markdown', 'csv', 'ndjson'].includes(options.format)) throw new RadarError('usage', '--format must be table, json, markdown, csv or ndjson.');
   if (options.demo && seen.has('--config')) throw new RadarError('usage', '--demo uses bundled repositories and cannot be combined with --config.');
   validateGroupSelection(options.groups);
@@ -166,12 +184,14 @@ export function parseArgs(args) {
   return options;
 }
 
-export async function runCli(args, { stdout = process.stdout, stderr = process.stderr, env = process.env, fetchImpl, now } = {}) {
+export async function runCli(args, { stdout = process.stdout, stderr = process.stderr, env = process.env, fetchImpl, now, outputIo } = {}) {
   let token = '';
   let format = 'table';
+  let fileOutput = false;
   try {
     const options = parseArgs(args);
     format = options.format;
+    fileOutput = options.outputPath !== undefined;
     if (options.help) { stdout.write(HELP); return 0; }
     if (options.version) { stdout.write('0.1.0\n'); return 0; }
     if (options.validateConfig) {
@@ -179,14 +199,27 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
       stdout.write('Config is valid locally. Repository existence, access and authentication were not checked.\n');
       return 0;
     }
-    let config, demoData;
+    let config, demoData, input, outputPlan;
     if (options.demo) {
-      try { demoData = JSON.parse(await readFile(new URL('../fixtures/demo-releases.json', import.meta.url), 'utf8')); }
+      try {
+        const demoPath = new URL('../fixtures/demo-releases.json', import.meta.url);
+        if (fileOutput) {
+          input = await resolveFilePath(fileURLToPath(demoPath));
+          demoData = await readConfigValue(input.path, undefined, identity => { input.identity = identity; });
+        } else demoData = JSON.parse(await readFile(demoPath, 'utf8'));
+      }
       catch { throw new RadarError('demo_read', 'Cannot read bundled synthetic demo data.'); }
       config = validateConfig({ repositories: Object.keys(demoData) });
     } else {
-      config = await readConfig(options.configPath);
+      if (fileOutput) {
+        try { input = await resolveFilePath(options.configPath); }
+        catch { throw new RadarError('config_read', 'Cannot read config file. Pass --config with a readable JSON file.'); }
+      }
+      config = await readConfig(input?.path ?? options.configPath, fileOutput ? identity => { input.identity = identity; } : undefined);
       selectRepositoryGroups(config, options.groups); // Resolve errors before token access.
+    }
+    if (fileOutput) outputPlan = await prepareOutput(options.outputPath, { overwrite: options.overwrite, input, io: outputIo });
+    if (!options.demo) {
       const suppliedToken = env.GITHUB_TOKEN;
       if (suppliedToken !== undefined && typeof suppliedToken !== 'string') throw new RadarError('invalid_token', 'GITHUB_TOKEN must be a string.');
       token = suppliedToken ?? '';
@@ -198,12 +231,14 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
       policyOverrides: { limit: options.limit, includePrereleases: options.includePrereleases },
     });
     // Redact strings before serialization or format-specific escaping; preserve typed metadata.
-    stdout.write(formatReport(redactValues(report, token), format));
+    const formatted = formatReport(redactValues(report, token), format);
+    if (!fileOutput) stdout.write(formatted);
     stderr.write(redact(formatIssues(report.issues), token));
+    if (fileOutput) await writeOutput(outputPlan, formatted);
     return report.complete ? 0 : 1;
   } catch (error) {
     const issue = safeError(error);
-    if (format === 'json') stdout.write(JSON.stringify(redactValues({ schemaVersion: 1, complete: false, releases: [], issues: [issue] }, token), null, 2) + '\n');
+    if (format === 'json' && !fileOutput) stdout.write(JSON.stringify(redactValues({ schemaVersion: 1, complete: false, releases: [], issues: [issue] }, token), null, 2) + '\n');
     stderr.write(redact(formatIssues([issue]), token));
     return 2;
   }

@@ -120,6 +120,6 @@ export function resolveRepositoryPolicies(config, { limit, includePrereleases } 
   }));
 }
 
-export async function readConfig(path) {
-  return validateConfig(await readConfigValue(path));
+export async function readConfig(path, onOpened) {
+  return validateConfig(await readConfigValue(path, undefined, onOpened));
 }

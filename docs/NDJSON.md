@@ -4,7 +4,10 @@ Select the exact lowercase `--format ndjson`. Aliases such as `jsonl`, uppercase
 `--format=ndjson`, missing values and repeated format flags are usage errors.
 The option conflicts with `--validate-config` in either order, before environment
 or network access. Help/version retain plain informational text. No config fields,
-dependencies, API requests, retries, output-file option or NDJSON input CLI are added.
+dependencies, API requests, retries or NDJSON input CLI are added. `--output FILE`
+saves identical bytes atomically; `--overwrite` explicitly permits replacing an
+ordinary report file. See the [file output policy](OUTPUT.md) for input protection,
+safe errors and limitations. Both options are CLI-only.
 Table, JSON schema 1, Markdown and CSV keep their existing contracts.
 
 ## Encoding and lifecycle
@@ -25,8 +28,8 @@ Every line parses independently. Object member order is not semantically meaning
 record order and array order are meaningful. No duplicate object keys are emitted.
 
 Use the direct Node command so an npm banner does not enter stdout. Keep stderr
-separate. Shell redirection owns file creation; choose a new filename to retain
-earlier reports. For example, this preserves the exit status under `set -e`:
+separate. Prefer `--output FILE` for atomic saving; shell redirection remains
+available and can overwrite files. This redirection example preserves status under `set -e`:
 
 ```sh
 if node bin/crypto-release-radar.js --config examples/repos.json --format ndjson > release-report.ndjson; then
@@ -49,6 +52,10 @@ esac
 A downstream interrupted transfer can truncate stdout independently of the scan
 result. A shell redirection can create an empty file even on exit 2. Do not use
 exit status, metadata or a parseable prefix alone as proof of document completion.
+With `--output`, stdout is empty and the entire ordinary report is saved for
+exit 0/1. File errors return 2 without saving an error envelope. A cleanup failure
+after atomic publication explicitly reports that the completed file remains;
+consult OUTPUT.md instead of inferring file absence from exit 2 alone.
 
 ## Records, order and fields
 

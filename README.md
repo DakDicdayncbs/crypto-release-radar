@@ -78,6 +78,8 @@ The same reader enforces these limits for scans and `--validate-config`; see
 ```text
 --config PATH             Config file
 --format FORMAT           table (default), json, markdown, csv, or ndjson
+--output FILE             Atomically save a report; stdout stays empty
+--overwrite               Allow replacing an ordinary file; requires --output
 --include-prereleases     Include prereleases in every repository
 --limit NUMBER            Override every repository's display limit
 --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
@@ -125,7 +127,7 @@ credentials, rate limits or release availability.
 `--help` and `--version`. Help/version show information without reading a file
 (help takes precedence if both are present). As with ordinary commands, all
 arguments must still parse successfully. `--demo`, `--group`, `--format` (even
-`table`), `--limit`, `--total-limit`, `--include-prereleases`, `--since`, `--until` and
+`table`), `--output`, `--overwrite`, `--limit`, `--total-limit`, `--include-prereleases`, `--since`, `--until` and
 `--tag-pattern` are conflicts in either order; `--validate-config=true` and
 positional values are also usage errors. Omitted policy values are validated
 with the normal defaults; validation does not save those defaults to the file.
@@ -679,12 +681,13 @@ when `--total-limit` is set. Individual releases contain `repository`, `id`,
 `digest: { text, truncated }`. Nullable names fall back to the tag. Issues have
 stable codes and optional `status`, `count`, `retryAfterSeconds`, or `resetAt`.
 
-Output goes to stdout. Diagnostics always go to stderr; JSON also embeds them in
+Output goes to stdout by default, or to `--output FILE`. Diagnostics always go to stderr; JSON also embeds them in
 `issues`, Markdown includes an Issues section, and CSV/NDJSON include issue records.
 Use the direct `node` command when piping report formats, because `npm run`
 adds its own script banner.
 Fatal config/local errors produce a smaller JSON error envelope when valid
-arguments selected JSON; fatal errors in Markdown/CSV/NDJSON and argument parsing failures
+arguments selected JSON without `--output`; file output never saves an error envelope.
+Fatal errors in Markdown/CSV/NDJSON and argument parsing failures
 leave stdout empty and report safe diagnostics on stderr.
 
 | Exit | Meaning |
@@ -692,6 +695,40 @@ leave stdout empty and report safe diagnostics on stderr.
 | `0` | Complete scan (possibly empty or display-limited), valid local config, demo, help, or version |
 | `1` | Incomplete scan or API failure; inspect `issues` and stderr |
 | `2` | Usage, configuration, or local failure |
+
+## Save an atomic report file
+
+Add `--output FILE` to any of the five report formats. It saves exactly the bytes
+that would appear on stdout, including incomplete reports with exit **1**; stdout
+stays empty. By default **any existing destination is refused**. Add the valueless
+`--overwrite` only to replace an existing ordinary report file atomically:
+
+```sh
+node bin/crypto-release-radar.js --demo --format json --output demo-report.json
+node bin/crypto-release-radar.js --demo --format json --output demo-report.json --overwrite
+node bin/crypto-release-radar.js --config examples/repos.json --format ndjson --output releases.ndjson
+```
+
+The parent directory must already exist. Config inputs (including the default
+config), demo input and their aliases are protected. Final symlinks, directories,
+FIFOs and devices are refused even with `--overwrite`. Argument errors and simple
+destination refusals occur before token/API access. Help/version do not touch
+output files; `--validate-config` rejects both new options. They are CLI-only.
+
+A unique sibling temp is opened exclusively with private `0600` permissions,
+fully written, synced and closed before publication. New paths use an atomic
+no-clobber link; replacement uses rename, without truncating the old file. Paths
+and input identities are rechecked before publication. CSV CRLF and NDJSON's final
+summary/LF are retained. Report generation, requests and display limits are unchanged.
+
+Local/write failures exit **2** with safe stderr and no JSON error envelope on
+stdout or in the output file. Before publication the previous output remains intact.
+If cleanup fails **after** publication, the diagnostic explicitly says the report
+was published; exit 2 then does not mean the output is absent or rolled back.
+See [file output policy](docs/OUTPUT.md) for exact errors, path/alias handling,
+concurrency and cleanup behavior. Use trusted local directories: the checks are
+not an atomic compare-and-swap against hostile filesystem mutation, and no crash
+durability or network-filesystem guarantees are claimed.
 
 ## Markdown reports
 
@@ -705,8 +742,8 @@ node bin/crypto-release-radar.js --config examples/groups.json --group clients -
 node bin/crypto-release-radar.js --demo --format markdown --include-prereleases --since 2026-09-29T00:00:00Z --tag-pattern 'v*' > demo-report.md
 ```
 
-Redirection is performed by the shell; the CLI has no `--output` option and does
-not create files itself. Choose a new filename to retain earlier reports. Keep
+Use `--output release-report.md` for atomic saving with the policy above. Shell
+redirection remains available and can overwrite an existing file. Keep
 stderr separate so diagnostics do not become document content. In scripts,
 capture the exit status even under `set -e`, for example:
 
@@ -796,8 +833,8 @@ text and does not guarantee safety after arbitrary spreadsheet re-saving.
 Import columns as **Text** to retain exact large IDs, dates and leading zeros.
 
 Exit 0 means complete, exit 1 still produces full CSV marked incomplete, and
-fatal exit 2 leaves stdout empty with safe stderr. Redirection belongs to the
-shell; no `--output` option is added. CSV changes neither collection nor the
+fatal exit 2 leaves stdout empty with safe stderr. `--output FILE` saves the same
+CSV bytes atomically; shell redirection remains available. CSV changes neither collection nor the
 existing table/JSON/Markdown formats. See the [CSV version 1 contract](docs/CSV.md)
 for exact column/row order, field applicability, null versus zero/false, safe
 import, formula-prefix rules and standalone normal/empty/partial examples.
@@ -820,7 +857,8 @@ node bin/crypto-release-radar.js --config examples/repos.json --format ndjson --
 Check both the process exit status and the document: **0** means a complete scan,
 **1** an incomplete scan with all issues and a final summary, **2** a fatal error
 with safe stderr and empty stdout. Shell redirection may still create an empty
-file. No output-file option, input command or extra requests are added.
+file. `--output FILE` saves identical NDJSON bytes with the atomic file policy
+above; no NDJSON input command or extra requests are added.
 
 Only a validated final summary, its terminating LF, consistent counts and end of
 input confirm document completion. `summary.documentComplete: true` is separate

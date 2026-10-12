@@ -1,0 +1,37 @@
+{
+  "kind": "crypto-release-radar-snapshot",
+  "snapshotVersion": 1,
+  "synthetic": false,
+  "report": {
+    "schemaVersion": 1,
+    "mode": "live",
+    "generatedAt": "2026-10-04T12:00:00.000Z",
+    "complete": false,
+    "digestNotice": "Automatic excerpt of release notes; not a verified breaking-change or security assessment. Read the source.",
+    "scope": {
+      "limitPerRepository": 5,
+      "includePrereleases": false,
+      "maxPagesPerRepository": 3
+    },
+    "repositories": [
+      {
+        "repository": "example/failed",
+        "complete": false,
+        "pagesFetched": 0,
+        "scannedEntries": 0,
+        "matchingReleases": 0,
+        "returnedReleases": 0,
+        "selectionLimited": false
+      }
+    ],
+    "releases": [],
+    "issues": [
+      {
+        "repository": "example/failed",
+        "code": "not_found",
+        "message": "Repository not found or not accessible with the current credentials.",
+        "status": 404
+      }
+    ]
+  }
+}

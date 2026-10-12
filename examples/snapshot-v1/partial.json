@@ -1,0 +1,145 @@
+{
+  "kind": "crypto-release-radar-snapshot",
+  "snapshotVersion": 1,
+  "synthetic": false,
+  "report": {
+    "schemaVersion": 1,
+    "mode": "live",
+    "generatedAt": "2026-10-04T12:00:00.000Z",
+    "complete": false,
+    "digestNotice": "Automatic excerpt of release notes; not a verified breaking-change or security assessment. Read the source.",
+    "scope": {
+      "limitPerRepository": 2,
+      "includePrereleases": false,
+      "maxPagesPerRepository": 1,
+      "since": null,
+      "until": null,
+      "tagPatterns": [],
+      "groups": []
+    },
+    "repositories": [
+      {
+        "repository": "example/partial",
+        "complete": false,
+        "pagesFetched": 1,
+        "scannedEntries": 4,
+        "matchingReleases": 2,
+        "returnedReleases": 2,
+        "selectionLimited": false,
+        "policy": {
+          "limit": 2,
+          "includePrereleases": false
+        },
+        "requested": true
+      },
+      {
+        "repository": "example/failed",
+        "complete": false,
+        "pagesFetched": 0,
+        "scannedEntries": 0,
+        "matchingReleases": 0,
+        "returnedReleases": 0,
+        "selectionLimited": false,
+        "policy": {
+          "limit": 2,
+          "includePrereleases": false
+        },
+        "requested": true
+      },
+      {
+        "repository": "example/rate",
+        "complete": false,
+        "pagesFetched": 0,
+        "scannedEntries": 0,
+        "matchingReleases": 0,
+        "returnedReleases": 0,
+        "selectionLimited": false,
+        "policy": {
+          "limit": 2,
+          "includePrereleases": false
+        },
+        "requested": true
+      },
+      {
+        "repository": "example/skipped",
+        "complete": false,
+        "pagesFetched": 0,
+        "scannedEntries": 0,
+        "matchingReleases": 0,
+        "returnedReleases": 0,
+        "selectionLimited": false,
+        "policy": {
+          "limit": 2,
+          "includePrereleases": false
+        },
+        "requested": false
+      }
+    ],
+    "releases": [
+      {
+        "repository": "example/partial",
+        "id": 2,
+        "name": "Example release",
+        "tag": "v1",
+        "publishedAt": "2026-10-03T12:00:00.000Z",
+        "prerelease": false,
+        "url": "https://github.com/example/partial/releases/tag/v1",
+        "digest": {
+          "text": "Synthetic notes.",
+          "truncated": false
+        }
+      },
+      {
+        "repository": "example/partial",
+        "id": 1,
+        "name": "Example release",
+        "tag": "v1",
+        "publishedAt": "2026-10-03T12:00:00.000Z",
+        "prerelease": false,
+        "url": "https://github.com/example/partial/releases/tag/v1",
+        "digest": {
+          "text": "Synthetic notes.",
+          "truncated": false
+        }
+      }
+    ],
+    "issues": [
+      {
+        "repository": "example/partial",
+        "code": "page_limit",
+        "message": "Page budget reached; additional releases may exist. Increase maxPages to scan further."
+      },
+      {
+        "repository": "example/partial",
+        "code": "invalid_record",
+        "message": "Malformed release entries were omitted.",
+        "count": 1
+      },
+      {
+        "repository": "example/partial",
+        "code": "duplicate_release",
+        "message": "Duplicate release IDs were omitted; pagination may have changed during the scan.",
+        "count": 1
+      },
+      {
+        "repository": "example/failed",
+        "code": "http_error",
+        "message": "GitHub returned an unsuccessful HTTP status.",
+        "status": 500
+      },
+      {
+        "repository": "example/rate",
+        "code": "rate_limited",
+        "message": "GitHub rate limit reached. Stop and retry later.",
+        "status": 429,
+        "retryAfterSeconds": 0,
+        "resetAt": "1970-01-01T00:00:00.000Z"
+      },
+      {
+        "repository": "example/skipped",
+        "code": "skipped",
+        "message": "Not requested after an authentication, access, or rate-limit failure."
+      }
+    ]
+  }
+}

@@ -24,7 +24,7 @@ not make an incomplete scan complete or an excerpt verified.
 ## CLI and exit behavior
 
 `--output` takes one nonempty path as a separate argument. Both new options may
-appear once, in either order; `--overwrite` requires `--output`. `--output=FILE`,
+appear once, in either order; `--overwrite` requires `--output` in this mode. `--output=FILE`,
 `--overwrite=true`, duplicate options, missing/blank values, ASCII controls/DEL,
 trailing `/`, and final `.`/`..` components are usage errors. Quote paths containing
 spaces; meaningful surrounding spaces are retained. Prefix a filename beginning
@@ -34,6 +34,11 @@ The options are CLI-only: config keys `output`/`overwrite` remain invalid. Both
 conflict with `--validate-config`. Validation of arguments precedes config, token,
 network and output filesystem work. Valid help/version requests retain ordinary
 text and do not inspect or create an output file, even with both new flags.
+
+The separate [snapshot mode](SNAPSHOTS.md) also accepts `--overwrite` and reuses
+this atomic writer. `--output` and `--snapshot` are mutually exclusive; no
+transaction across two output files is implied. Snapshot validation/container
+and stdout rules are documented separately; ordinary `--output` bytes are unchanged.
 
 | Result | Exit | File/stdout behavior |
 | --- | --- | --- |

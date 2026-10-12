@@ -6,3 +6,6 @@ coverage/
 radar.config.json
 *.log
 .DS_Store
+*.radar-snapshot.json
+/snapshots/
+.radar-output-*.tmp

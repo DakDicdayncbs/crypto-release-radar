@@ -1,0 +1,413 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DakDicdayncbs/crypto-release-radar/blob/main/schemas/snapshot-v1.schema.json",
+  "title": "Crypto Release Radar private snapshot, version 1",
+  "description": "Closed storage container with a whitelisted report-v1 subset. No raw responses or extra properties. All report strings remain opaque after redaction. Writer additionally enforces aggregate 4194304 UTF-16 text units, 16777216 UTF-8 bytes, active-token absence and CLI provenance consistency. This schema does not authenticate data or prove sanitization. See docs/SNAPSHOTS.md.",
+  "type": "object",
+  "required": [
+    "kind",
+    "snapshotVersion",
+    "synthetic",
+    "report"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "crypto-release-radar-snapshot"
+    },
+    "snapshotVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "synthetic": {
+      "type": "boolean"
+    },
+    "report": {
+      "$ref": "#/$defs/report"
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    },
+    "selected": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 50
+    },
+    "entries": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "totalEntries": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20000
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "limitPerRepository",
+        "includePrereleases",
+        "maxPagesPerRepository"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "limitPerRepository": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 50
+        },
+        "includePrereleases": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "maxPagesPerRepository": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "since": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "until": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tagPatterns": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "totalLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "limit",
+        "includePrereleases"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "$ref": "#/$defs/limit"
+        },
+        "includePrereleases": {
+          "type": "boolean"
+        }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "required": [
+        "repository",
+        "complete",
+        "pagesFetched",
+        "scannedEntries",
+        "matchingReleases",
+        "returnedReleases",
+        "selectionLimited"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/text"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "pagesFetched": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "scannedEntries": {
+          "$ref": "#/$defs/entries"
+        },
+        "matchingReleases": {
+          "$ref": "#/$defs/entries"
+        },
+        "returnedReleases": {
+          "$ref": "#/$defs/selected"
+        },
+        "selectionLimited": {
+          "type": "boolean"
+        },
+        "policy": {
+          "$ref": "#/$defs/policy"
+        },
+        "requested": {
+          "type": "boolean"
+        },
+        "selectedReleases": {
+          "$ref": "#/$defs/selected"
+        },
+        "globalSelectionLimited": {
+          "type": "boolean"
+        }
+      }
+    },
+    "digest": {
+      "type": "object",
+      "required": [
+        "text",
+        "truncated"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "$ref": "#/$defs/text"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "required": [
+        "repository",
+        "id",
+        "name",
+        "tag",
+        "publishedAt",
+        "prerelease",
+        "url",
+        "digest"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/text"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "tag": {
+          "$ref": "#/$defs/text"
+        },
+        "publishedAt": {
+          "$ref": "#/$defs/text"
+        },
+        "prerelease": {
+          "type": "boolean"
+        },
+        "url": {
+          "$ref": "#/$defs/text"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/text"
+        },
+        "code": {
+          "$ref": "#/$defs/text"
+        },
+        "message": {
+          "$ref": "#/$defs/text"
+        },
+        "status": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "count": {
+          "$ref": "#/$defs/entries"
+        },
+        "retryAfterSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999999
+        },
+        "resetAt": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "display": {
+      "type": "object",
+      "required": [
+        "matchingReleases",
+        "selectedReleases",
+        "returnedReleases",
+        "perRepositoryHiddenReleases",
+        "globallyHiddenReleases",
+        "globalSelectionLimited"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "matchingReleases": {
+          "$ref": "#/$defs/totalEntries"
+        },
+        "selectedReleases": {
+          "$ref": "#/$defs/entries"
+        },
+        "returnedReleases": {
+          "$ref": "#/$defs/entries"
+        },
+        "perRepositoryHiddenReleases": {
+          "$ref": "#/$defs/totalEntries"
+        },
+        "globallyHiddenReleases": {
+          "$ref": "#/$defs/entries"
+        },
+        "globalSelectionLimited": {
+          "type": "boolean"
+        }
+      }
+    },
+    "report": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "mode",
+        "generatedAt",
+        "complete",
+        "digestNotice",
+        "scope",
+        "repositories",
+        "releases",
+        "issues"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "type": "integer",
+          "const": 1
+        },
+        "mode": {
+          "$ref": "#/$defs/text"
+        },
+        "generatedAt": {
+          "$ref": "#/$defs/text"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "digestNotice": {
+          "$ref": "#/$defs/text"
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "repositories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/repository"
+          }
+        },
+        "releases": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/release"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue",
+            "required": [
+              "repository"
+            ]
+          },
+          "maxItems": 1000
+        },
+        "display": {
+          "$ref": "#/$defs/display"
+        }
+      },
+      "anyOf": [
+        {
+          "description": "Before/without the optional global display limit, all global-budget additions are absent.",
+          "properties": {
+            "scope": {
+              "properties": {
+                "totalLimit": false
+              }
+            },
+            "display": false,
+            "repositories": {
+              "items": {
+                "properties": {
+                  "selectedReleases": false,
+                  "globalSelectionLimited": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "The global-budget additions form one presence group; their arithmetic is not validated here.",
+          "required": [
+            "display"
+          ],
+          "properties": {
+            "scope": {
+              "required": [
+                "totalLimit"
+              ]
+            },
+            "repositories": {
+              "items": {
+                "required": [
+                  "selectedReleases",
+                  "globalSelectionLimited"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

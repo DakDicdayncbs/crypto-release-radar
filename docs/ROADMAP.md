@@ -4,8 +4,8 @@ A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
 Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entries
 10–11 on 2026-10-04, entries 12–13 on 2026-10-05, and entries 14–15 on 2026-10-06;
-entry 16 was completed on 2026-10-07, entry 17 on 2026-10-10, and entry 18 on
-2026-10-12; entries 19–45 remain planned.
+entry 16 was completed on 2026-10-07, entry 17 on 2026-10-10, and entries 18–19 on
+2026-10-12; entries 20–45 remain planned.
 The count is a planning aid, not a commit target. Combine or revise future scope
 when evidence makes that useful.
 
@@ -190,9 +190,25 @@ from the initial baseline publication.
   rejects unsupported keywords/refs. Runtime bytes, schemaVersion 1, package,
   workflow and all five formats remain unchanged; no product input/snapshot
   command or subsequent roadmap item is added.
-- [ ] **19. Sanitized report snapshots.** Save versioned local normalized snapshots
-  with atomic writes; never store tokens/raw API responses; test secret rejection,
-  restrictive file handling, and interrupted writes.
+- [x] **19. Sanitized report snapshots.** Completed 2026-10-12: add explicit
+  `--snapshot FILE` with a Git-ignored `.radar-snapshot.json` suffix, independent
+  container version/schema, typed synthetic provenance and a closed report-field
+  whitelist. Preserve original generation time, ordering, query/policies, typed
+  null/false/zero/omissions, completeness and all safe issues; never save a fatal
+  envelope, raw response/config/env fields or unknown extras. Bound projection to
+  4 Mi UTF-16 text units/1000 issues and serialization to 16 MiB; reject an active
+  token in decoded values or final JSON before temp creation. Reuse the existing
+  atomic 0600 writer, input/alias protection, no-clobber and explicit overwrite
+  semantics. Reject simultaneous --output and validation mode; preserve ordinary
+  report stdout after save and exit 0/1, with safe pre/post-publication failures.
+  All 339 tests pass, covering all scan states/formats, mixed groups/filters/both
+  limits, exact large IDs, redaction, strict fields/versions, budget boundaries,
+  secret rejection, short writes/fsync/close/publication/cleanup faults, races,
+  aliases and killed-process partial writes. Syntax checks, five offline demos
+  and snapshot/stdout byte comparisons pass. Document whitelist, provenance,
+  secret-detection and filesystem/resource limits in docs/SNAPSHOTS.md; provide
+  only fictional tracked containers. No snapshot reader/render/comparison,
+  network, dependencies, workflow or signal lifecycle changes.
 - [ ] **20. Offline snapshot rendering.** Load validated snapshots for table/JSON
   output, preserve original acquisition time and completeness, and test damaged or
   incompatible versions without any network fallback.

@@ -27,12 +27,17 @@ does not by itself establish report validity or delivery completeness.
 | --- | --- | --- |
 | JSON scan, complete (including empty or display-limited) | 0 | Full report, `complete: true` |
 | JSON scan, incomplete or failed API access | 1 | Full report, `complete: false`, preserved successes and issues |
-| Successfully parsed JSON scan arguments, fatal config/token/local error, **no `--output`** | 2 | Smaller fatal envelope below, plus safe stderr |
+| Successfully parsed JSON scan arguments, fatal config/token/local error, **no `--output` or `--snapshot`** | 2 | Smaller fatal envelope below, plus safe stderr |
 | Argument parsing/validation failure, even if `--format json` appeared earlier | 2 | Empty stdout; safe stderr |
 | `--validate-config` | 0 / 2 | Fixed success text / empty stdout; no JSON envelope; `--format` is a conflict |
 | Successfully parsed `--help` or `--version`, even with JSON format | 0 | Informational text; no report |
 | JSON scan with `--output FILE` | 0 / 1 | Empty stdout; identical full-report bytes saved atomically |
 | Fatal error with `--output FILE` | 2 | Empty stdout; no fatal envelope saved |
+
+The opt-in [snapshot mode](SNAPSHOTS.md) writes a separate versioned container
+and prints the same ordinary report after successful saving (0/1). Snapshot
+failures return 2 with empty stdout and no fatal envelope; a post-publication
+failure can leave a saved snapshot. It does not change this report-v1 schema.
 
 JSON scan issues also appear on stderr; keep it separate from stdout. Help and
 version still require arguments to parse. Check the command's status **and**

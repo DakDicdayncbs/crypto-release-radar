@@ -79,7 +79,8 @@ The same reader enforces these limits for scans and `--validate-config`; see
 --config PATH             Config file
 --format FORMAT           table (default), json, markdown, csv, or ndjson
 --output FILE             Atomically save a report; stdout stays empty
---overwrite               Allow replacing an ordinary file; requires --output
+--snapshot FILE           Save a private .radar-snapshot.json and print the report
+--overwrite               Replace an ordinary file; requires --output or --snapshot
 --include-prereleases     Include prereleases in every repository
 --limit NUMBER            Override every repository's display limit
 --total-limit NUMBER      Cap the final combined display (1–1000, CLI only)
@@ -127,7 +128,7 @@ credentials, rate limits or release availability.
 `--help` and `--version`. Help/version show information without reading a file
 (help takes precedence if both are present). As with ordinary commands, all
 arguments must still parse successfully. `--demo`, `--group`, `--format` (even
-`table`), `--output`, `--overwrite`, `--limit`, `--total-limit`, `--include-prereleases`, `--since`, `--until` and
+`table`), `--output`, `--snapshot`, `--overwrite`, `--limit`, `--total-limit`, `--include-prereleases`, `--since`, `--until` and
 `--tag-pattern` are conflicts in either order; `--validate-config=true` and
 positional values are also usage errors. Omitted policy values are validated
 with the normal defaults; validation does not save those defaults to the file.
@@ -686,7 +687,7 @@ Output goes to stdout by default, or to `--output FILE`. Diagnostics always go t
 Use the direct `node` command when piping report formats, because `npm run`
 adds its own script banner.
 Fatal config/local errors produce a smaller JSON error envelope when valid
-arguments selected JSON without `--output`; file output never saves an error envelope.
+arguments selected JSON without `--output` or `--snapshot`; neither file mode saves an error envelope.
 Fatal errors in Markdown/CSV/NDJSON and argument parsing failures
 leave stdout empty and report safe diagnostics on stderr.
 
@@ -754,6 +755,41 @@ See [file output policy](docs/OUTPUT.md) for exact errors, path/alias handling,
 concurrency and cleanup behavior. Use trusted local directories: the checks are
 not an atomic compare-and-swap against hostile filesystem mutation, and no crash
 durability or network-filesystem guarantees are claimed.
+
+## Save a private normalized snapshot
+
+`--snapshot FILE` saves a versioned JSON container of the fully collected,
+normalized and token-redacted report, with explicit synthetic/live provenance.
+The filename must end in `.radar-snapshot.json`, which is ignored by Git:
+
+```sh
+node bin/crypto-release-radar.js --demo --snapshot demo.radar-snapshot.json
+node bin/crypto-release-radar.js --demo --format json --snapshot demo.radar-snapshot.json --overwrite
+```
+
+Use a new path by default; `--overwrite` explicitly permits replacing an ordinary
+file. Snapshot writing reuses the atomic private `0600` output implementation and
+config/demo input protections. It conflicts with `--output` and `--validate-config`;
+valid help/version requests do no file I/O. All five formats remain available on
+stdout **after** a successful save; the saved container is independent of `--format`.
+Exit 0 means complete; exit 1 saves/prints the incomplete report and all issues.
+Fatal failures return 2 with safe stderr and empty stdout, without a fatal
+envelope. Post-publication cleanup/stdout failures explicitly report the saved state.
+
+The writer preserves original `generatedAt`, query/policies, ordering and typed
+null/false/zero/omissions. Its closed whitelist excludes raw bodies, headers,
+request URLs, config/env/credentials and unknown fields. Residual active-token
+text in values or serialized bytes refuses saving. This cannot detect arbitrary
+unknown secrets in author text, and very short tokens may conservatively match
+harmless JSON metadata. Bounds are 4 Mi UTF-16 text units, 1000 issues and 16 MiB
+serialized UTF-8; oversize data is refused, never truncated.
+
+There is no snapshot read/render/compare command. See the
+[snapshot contract and limits](docs/SNAPSHOTS.md),
+[closed version 1 schema](schemas/snapshot-v1.schema.json), and
+[fictional examples](examples/snapshot-v1/README.md). Ordinary report-v1 JSON and
+all behavior without `--snapshot` are preserved. Keep real snapshots untracked;
+ignore rules do not protect already tracked files or forced additions.
 
 ## Markdown reports
 

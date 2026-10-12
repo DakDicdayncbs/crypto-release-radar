@@ -696,6 +696,31 @@ leave stdout empty and report safe diagnostics on stderr.
 | `1` | Incomplete scan or API failure; inspect `issues` and stderr |
 | `2` | Usage, configuration, or local failure |
 
+## JSON reports and compatibility
+
+The [JSON v1 contract](docs/JSON.md) documents every field, type/bound, optional
+addition, null versus omitted/zero/false, ordering and completeness semantics.
+The self-contained [Draft 2020-12 report schema](schemas/report-v1.schema.json)
+distinguishes full reports from the existing smaller fatal envelope without
+changing JSON bytes or `schemaVersion: 1`. It accepts legacy omissions and
+unknown additive properties, but rejects invalid known fields and versions.
+
+Strings are opaque after token redaction: even mode, URLs, dates, repository
+names and issue codes can change. Structural validation does not establish safe
+links, correct counter sums, freshness or exhaustive GitHub results. The
+[independent fixtures](examples/json-v1/README.md) and
+[offline consumer](examples/consume-json.js) demonstrate compatibility:
+
+```sh
+node examples/consume-json.js < examples/json-v1/current.json
+```
+
+The example projects checked fields into its own `{kind,data}` wrapper and keeps
+incomplete results incomplete. It is not a new CLI input/snapshot command.
+Consult the contract's [exit/stdout table](docs/JSON.md#bytes-stdout-and-exit-status):
+fatal JSON envelopes apply only after successful argument parsing without file
+output; usage, config-validation, help/version and file errors differ.
+
 ## Save an atomic report file
 
 Add `--output FILE` to any of the five report formats. It saves exactly the bytes

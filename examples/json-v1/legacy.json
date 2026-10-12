@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "mode": "live",
+  "generatedAt": "2026-10-04T12:00:00.000Z",
+  "complete": true,
+  "digestNotice": "Automatic excerpt of release notes; not a verified breaking-change or security assessment. Read the source.",
+  "scope": {
+    "limitPerRepository": 5,
+    "includePrereleases": false,
+    "maxPagesPerRepository": 3
+  },
+  "repositories": [
+    {
+      "repository": "example/legacy",
+      "complete": true,
+      "pagesFetched": 1,
+      "scannedEntries": 1,
+      "matchingReleases": 1,
+      "returnedReleases": 1,
+      "selectionLimited": false
+    }
+  ],
+  "releases": [
+    {
+      "repository": "example/legacy",
+      "id": 1,
+      "name": "Example release",
+      "tag": "v1",
+      "publishedAt": "2026-10-03T12:00:00.000Z",
+      "prerelease": false,
+      "url": "https://github.com/example/legacy/releases/tag/v1",
+      "digest": {
+        "text": "Synthetic notes.",
+        "truncated": false
+      }
+    }
+  ],
+  "issues": []
+}

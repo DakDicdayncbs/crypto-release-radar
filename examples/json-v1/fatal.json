@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "complete": false,
+  "releases": [],
+  "issues": [
+    {
+      "code": "config_read",
+      "message": "Cannot read config file. Pass --config with a readable JSON file."
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "mode": "live",
+  "generatedAt": "2026-10-04T12:00:00.000Z",
+  "complete": true,
+  "digestNotice": "Automatic excerpt of release notes; not a verified breaking-change or security assessment. Read the source.",
+  "scope": {
+    "limitPerRepository": null,
+    "includePrereleases": null,
+    "maxPagesPerRepository": 3,
+    "since": "2026-10-02T00:00:00.000Z",
+    "until": "2026-10-04T23:59:59.999Z",
+    "tagPatterns": [
+      "v*"
+    ],
+    "groups": [
+      "stable",
+      "preview"
+    ],
+    "totalLimit": 2
+  },
+  "repositories": [
+    {
+      "repository": "example/a",
+      "complete": true,
+      "pagesFetched": 1,
+      "scannedEntries": 5,
+      "matchingReleases": 3,
+      "returnedReleases": 1,
+      "selectionLimited": true,
+      "policy": {
+        "limit": 1,
+        "includePrereleases": false
+      },
+      "requested": true,
+      "selectedReleases": 1,
+      "globalSelectionLimited": false
+    },
+    {
+      "repository": "example/z",
+      "complete": true,
+      "pagesFetched": 2,
+      "scannedEntries": 3,
+      "matchingReleases": 3,
+      "returnedReleases": 1,
+      "selectionLimited": true,
+      "policy": {
+        "limit": 2,
+        "includePrereleases": true
+      },
+      "requested": true,
+      "selectedReleases": 2,
+      "globalSelectionLimited": true
+    }
+  ],
+  "releases": [
+    {
+      "repository": "example/z",
+      "id": 9007199254740991,
+      "name": "Preview 🚀",
+      "tag": "v3-rc1",
+      "publishedAt": "2026-10-04T12:00:00.000Z",
+      "prerelease": true,
+      "url": "https://github.com/example/z/releases/tag/v3-rc1",
+      "digest": {
+        "text": "Synthetic truncated notes…",
+        "truncated": true
+      }
+    },
+    {
+      "repository": "example/a",
+      "id": 7,
+      "name": "Example release",
+      "tag": "v1",
+      "publishedAt": "2026-10-03T12:00:00.000Z",
+      "prerelease": false,
+      "url": "https://github.com/example/a/releases/tag/v1",
+      "digest": {
+        "text": "Synthetic notes.",
+        "truncated": false
+      }
+    }
+  ],
+  "issues": [],
+  "display": {
+    "matchingReleases": 6,
+    "selectedReleases": 3,
+    "returnedReleases": 2,
+    "perRepositoryHiddenReleases": 3,
+    "globallyHiddenReleases": 1,
+    "globalSelectionLimited": true
+  }
+}

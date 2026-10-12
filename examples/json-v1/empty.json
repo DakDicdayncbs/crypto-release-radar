@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "mode": "live",
+  "generatedAt": "2026-10-04T12:00:00.000Z",
+  "complete": true,
+  "digestNotice": "Automatic excerpt of release notes; not a verified breaking-change or security assessment. Read the source.",
+  "scope": {
+    "limitPerRepository": 5,
+    "includePrereleases": false,
+    "maxPagesPerRepository": 3,
+    "since": null,
+    "until": null,
+    "tagPatterns": [],
+    "groups": [],
+    "totalLimit": 1
+  },
+  "repositories": [
+    {
+      "repository": "example/empty",
+      "complete": true,
+      "pagesFetched": 1,
+      "scannedEntries": 0,
+      "matchingReleases": 0,
+      "returnedReleases": 0,
+      "selectionLimited": false,
+      "policy": {
+        "limit": 5,
+        "includePrereleases": false
+      },
+      "requested": true,
+      "selectedReleases": 0,
+      "globalSelectionLimited": false
+    }
+  ],
+  "releases": [],
+  "issues": [],
+  "display": {
+    "matchingReleases": 0,
+    "selectedReleases": 0,
+    "returnedReleases": 0,
+    "perRepositoryHiddenReleases": 0,
+    "globallyHiddenReleases": 0,
+    "globalSelectionLimited": false
+  }
+}

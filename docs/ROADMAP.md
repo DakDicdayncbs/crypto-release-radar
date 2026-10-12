@@ -4,8 +4,8 @@ A finite plan of 45 useful increments. Entries 01–05 describe the local 0.1.0
 baseline delivered on 2026-09-30; they are not separate fabricated commits.
 Entries 06–07 were completed on 2026-10-02, entries 08–09 on 2026-10-03, and entries
 10–11 on 2026-10-04, entries 12–13 on 2026-10-05, and entries 14–15 on 2026-10-06;
-entry 16 was completed on 2026-10-07 and entry 17 on 2026-10-10;
-entries 18–45 remain planned.
+entry 16 was completed on 2026-10-07, entry 17 on 2026-10-10, and entry 18 on
+2026-10-12; entries 19–45 remain planned.
 The count is a planning aid, not a commit target. Combine or revise future scope
 when evidence makes that useful.
 
@@ -172,9 +172,24 @@ from the initial baseline publication.
   Document exact path/error/concurrency/cleanup policy and local-filesystem,
   hostile-directory and crash-durability limits in docs/OUTPUT.md. No dependencies,
   network/workflow changes, directory creation or signal lifecycle additions.
-- [ ] **18. JSON contract documentation.** Publish a versioned report schema and
-  compatibility examples; add consumer tests for optional fields, error envelopes,
-  and future-compatible unknown properties.
+- [x] **18. JSON contract documentation.** Completed 2026-10-12: add a
+  self-contained Draft 2020-12 schema with stable version/ID and disjoint full
+  report/fatal-envelope branches. Preserve baseline required fields, typed
+  optional additions, mixed-policy nulls, global-budget presence rules and
+  forward-compatible unknown properties. Treat all post-redaction strings as
+  opaque while preserving numeric/boolean bounds. Document every field, sorting,
+  provenance, counters, completeness, exit/stdout/file distinctions and structural
+  validation limits in docs/JSON.md. Provide six independent synthetic legacy,
+  current, empty, partial/failed/skipped and fatal fixtures plus a runnable offline
+  consumer that projects known fields, preserves incomplete states and rejects
+  unsupported versions. All 304 tests pass, including 551 independent structural
+  cases, schema mutation checks, CLI/fake-API exits, file/stdout byte equality,
+  exact large IDs, nested extras and redaction expansion. Changed-JS syntax and
+  all five offline demos pass. Standard Draft 2020-12 validators were unavailable
+  locally; no dependencies were installed. The test-only subset interpreter
+  rejects unsupported keywords/refs. Runtime bytes, schemaVersion 1, package,
+  workflow and all five formats remain unchanged; no product input/snapshot
+  command or subsequent roadmap item is added.
 - [ ] **19. Sanitized report snapshots.** Save versioned local normalized snapshots
   with atomic writes; never store tokens/raw API responses; test secret rejection,
   restrictive file handling, and interrupted writes.
